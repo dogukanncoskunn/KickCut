@@ -19,6 +19,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::AsyncWriteExt;
 
@@ -174,9 +175,27 @@ pub async fn resolve(dir: &Path) -> Result<(Status, Option<Tools>), String> {
     ))
 }
 
+/// True while an install is running, so the startup tidy-up below cannot
+/// delete an archive that is still being written.
+static INSTALLING: AtomicBool = AtomicBool::new(false);
+
 #[tauri::command]
 pub async fn ffmpeg_status(app: AppHandle) -> Result<Status, String> {
-    Ok(locate(&app).await?.0)
+    let (status, _) = locate(&app).await?;
+    // A previous attempt that was interrupted leaves its archive behind. This
+    // is the moment it is provably garbage: nothing usable was installed, and
+    // no install is running.
+    if status.source == Source::Missing && !INSTALLING.load(Ordering::Relaxed) {
+        let freed = clear_stale_archive(&managed_dir(&app)?).await;
+        if freed > 0 {
+            log_cleared(freed);
+        }
+    }
+    Ok(status)
+}
+
+fn log_cleared(bytes: u64) {
+    eprintln!("cleared {bytes} bytes left by an unfinished ffmpeg install");
 }
 
 /// Download, verify and unpack the pinned build.
@@ -190,11 +209,18 @@ pub async fn install_ffmpeg(app: AppHandle) -> Result<Status, String> {
         .await
         .map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
 
+    // A stump from a previous attempt is replaced, not resumed: the download
+    // has no range support and the checksum covers the whole file.
+    clear_stale_archive(&dir).await;
+
+    INSTALLING.store(true, Ordering::Relaxed);
     let reporter = app.clone();
-    fetch_and_unpack(&dir, move |stage, received, total| {
+    let outcome = fetch_and_unpack(&dir, move |stage, received, total| {
         emit(&reporter, stage, received, total)
     })
-    .await?;
+    .await;
+    INSTALLING.store(false, Ordering::Relaxed);
+    outcome?;
 
     let (status, tools) = locate(&app).await?;
     if tools.is_none() {
@@ -226,11 +252,29 @@ pub async fn fetch_and_unpack(
 ) -> Result<(), String> {
     let archive = dir.join(ARCHIVE);
 
+    /*
+     * The archive is removed however this ends.
+     *
+     * It used only to be cleaned up on success and on a checksum mismatch, so
+     * an install that failed - or that was still running when the app was
+     * closed - left up to 106 MB sitting in the app's folder with nothing on
+     * screen to say why. Found in the wild: a 12 MB stump from an interrupted
+     * attempt, and Settings still just said "not installed".
+     */
+    let outcome = fetch_and_unpack_inner(dir, &archive, report).await;
+    let _ = tokio::fs::remove_file(&archive).await;
+    outcome
+}
+
+async fn fetch_and_unpack_inner(
+    dir: &Path,
+    archive: &Path,
+    report: impl Fn(&'static str, u64, u64) + Send + Sync + 'static,
+) -> Result<(), String> {
     // Download and hash in one pass, then check before anything is unpacked.
-    let digest = download(&archive, &report).await?;
+    let digest = download(archive, &report).await?;
     report("verifying", 0, 0);
     if digest != SHA256 {
-        let _ = tokio::fs::remove_file(&archive).await;
         return Err(format!(
             "The downloaded ffmpeg does not match its published checksum, so it was discarded. \
              Expected {SHA256}, got {digest}."
@@ -239,14 +283,30 @@ pub async fn fetch_and_unpack(
 
     report("extracting", 0, 0);
     let extract_to = dir.to_path_buf();
-    let archive_for_task = archive.clone();
+    let archive_for_task = archive.to_path_buf();
     // The zip crate is blocking and this unpacks a couple of hundred megabytes,
     // so it runs off the async runtime rather than stalling every task on it.
     tokio::task::spawn_blocking(move || extract(&archive_for_task, &extract_to))
         .await
         .map_err(|e| format!("Unpacking ffmpeg did not finish: {e}"))??;
-    let _ = tokio::fs::remove_file(&archive).await;
     Ok(())
+}
+
+/// Delete an archive left behind by an install that never finished.
+///
+/// Only safe when nothing is downloading, so it is called where an install is
+/// about to start or is known not to be running.
+pub async fn clear_stale_archive(dir: &Path) -> u64 {
+    let archive = dir.join(ARCHIVE);
+    let Ok(meta) = tokio::fs::metadata(&archive).await else {
+        return 0;
+    };
+    let size = meta.len();
+    if tokio::fs::remove_file(&archive).await.is_ok() {
+        size
+    } else {
+        0
+    }
 }
 
 /// Stream the archive to `target`, returning its lowercase hex SHA-256.
@@ -391,6 +451,30 @@ mod tests {
         }
         assert_eq!(SHA256.len(), 64);
         assert!(SHA256.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+    }
+
+    /// An install that never finished leaves an archive; it must not survive.
+    ///
+    /// Found in the wild before this was fixed: a 12 MB stump of the 106 MB
+    /// archive sitting in the app folder, with Settings still just saying
+    /// "not installed" and nothing to explain the missing disk space.
+    #[tokio::test]
+    async fn an_interrupted_install_leaves_nothing_behind() {
+        let dir = std::env::temp_dir().join("kickcut-stale-archive-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let archive = dir.join(ARCHIVE);
+        std::fs::write(&archive, vec![0u8; 12_934_883]).unwrap();
+
+        let freed = clear_stale_archive(&dir).await;
+        assert_eq!(freed, 12_934_883, "should report what it reclaimed");
+        assert!(!archive.exists(), "the stump should be gone");
+
+        // Nothing to clear is not an error, and reclaims nothing.
+        assert_eq!(clear_stale_archive(&dir).await, 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Copy a real ffmpeg pair into `dir`, or skip the test if none is around.
