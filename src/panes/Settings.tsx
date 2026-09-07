@@ -1,82 +1,71 @@
-import { LOCALES, LOCALE_NAMES, useLocale, useT } from "../i18n";
-import type { Locale } from "../i18n";
+import type { ReactNode } from "react";
+import { useT } from "../i18n";
 import { useFfmpeg } from "../lib/Ffmpeg";
 import { bytes } from "../lib/format";
 import { useMotion } from "../lib/Motion";
-import { SPEED_STEPS, useSpeedLimit } from "../lib/Speed";
-import { SCALE_MAX, SCALE_MIN, SCALE_STEP, useScale } from "../lib/Scale";
-import { Badge, Button, Card, Field, Note, ProgressBar, Section, Select, Spinner, Toggle } from "../lib/ui";
+import { SpeedControl } from "../lib/SpeedControl";
+import { Badge, Button, Card, Note, ProgressBar, Spinner, Toggle } from "../lib/ui";
 
+/*
+ * Settings as a row of cards rather than a column of sections.
+ *
+ * Stacked, each setting was a heading, a hint and a lone control marooned in
+ * the middle of a wide empty screen - a tall list of small things. Each one is
+ * now a card that carries its own title, and they sit on one uniform grid: same
+ * width, and the same height because grid rows stretch. Nothing is allowed to
+ * be a different shape from its neighbours.
+ */
 export function Settings() {
   const t = useT();
-  const { locale, setLocale } = useLocale();
   const { motion, setMotion } = useMotion();
-  const { scale, setScale } = useScale();
-  const speed = useSpeedLimit();
 
   return (
-    <div className="flex flex-col gap-8">
-      <Section title={t("ffmpeg.title")} hint={t("ffmpeg.hint")}>
-        <FfmpegCard />
-      </Section>
+    <div
+      className="grid items-stretch gap-5"
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(20rem, 1fr))" }}
+    >
+      <SettingCard title={t("ffmpeg.title")} hint={t("ffmpeg.hint")}>
+        <FfmpegSetting />
+      </SettingCard>
 
-      <Section title={t("speed.label")} hint={t("speed.hint")}>
-        <Card className="max-w-sm p-4">
-          <Field label={t("speed.label")}>
-            <Select value={String(speed.limit)} onChange={(e) => speed.setLimit(Number(e.target.value))}>
-              {SPEED_STEPS.map((step) => (
-                <option key={step} value={step}>
-                  {step === 0 ? t("speed.unlimited") : `${step} MB/s`}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </Card>
-      </Section>
+      <SettingCard title={t("speed.label")} hint={t("speed.hint")}>
+        <SpeedControl />
+      </SettingCard>
 
-      <Section title={t("settings.language")} hint={t("settings.language.hint")}>
-        <Card className="max-w-sm p-4">
-          <Field label={t("settings.language")}>
-            <Select value={locale} onChange={(e) => setLocale(e.target.value as Locale)}>
-              {LOCALES.map((l) => (
-                <option key={l} value={l}>
-                  {LOCALE_NAMES[l]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </Card>
-      </Section>
-
-      <Section title={t("settings.scale")}>
-        <Card className="flex max-w-sm items-center gap-4 p-4">
-          <input
-            type="range"
-            min={SCALE_MIN}
-            max={SCALE_MAX}
-            step={SCALE_STEP}
-            value={scale}
-            onChange={(e) => setScale(Number(e.target.value))}
-            className="flex-1 accent-[var(--color-kick)]"
-            aria-label={t("settings.scale")}
-          />
-          <span className="w-12 shrink-0 text-right font-mono text-body text-muted">
-            {Math.round(scale * 100)}%
-          </span>
-        </Card>
-      </Section>
-
-      <Section title={t("settings.motion")}>
-        <Card className="flex max-w-sm items-center justify-between gap-4 p-4">
-          <span className="text-body">{motion ? t("settings.motion.on") : t("settings.motion.off")}</span>
+      <SettingCard title={t("settings.motion")} hint={t("settings.motion.hint")}>
+        <div className="flex items-center gap-2.5">
           <Toggle checked={motion} onChange={setMotion} label={t("settings.motion")} />
-        </Card>
-      </Section>
+          <span className="text-body">
+            {motion ? t("settings.motion.on") : t("settings.motion.off")}
+          </span>
+        </div>
+      </SettingCard>
     </div>
   );
 }
 
-function FfmpegCard() {
+function SettingCard({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="flex h-full flex-col gap-4 p-5">
+      <div className="flex flex-col gap-1">
+        <h2 className="font-display text-mid font-semibold text-body">{title}</h2>
+        <p className="text-small text-muted">{hint}</p>
+      </div>
+      {/* Pushed to the bottom so every card's control sits on the same line. */}
+      <div className="mt-auto">{children}</div>
+    </Card>
+  );
+}
+
+function FfmpegSetting() {
   const t = useT();
   const { status, progress, error, install } = useFfmpeg();
 
@@ -85,8 +74,8 @@ function FfmpegCard() {
     // verifying and unpacking stages, which have no meaningful percentage.
     const fraction = progress.total > 0 ? progress.received / progress.total : null;
     return (
-      <Card className="flex max-w-xl flex-col gap-3 p-5">
-        <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-3">
           <span className="text-body">{t(`ffmpeg.installing.${progress.stage}`)}</span>
           {fraction !== null ? (
             <span className="font-mono text-small text-muted">
@@ -96,16 +85,16 @@ function FfmpegCard() {
         </div>
         <ProgressBar value={fraction} />
         <p className="text-small text-muted">{t("ffmpeg.oneTime")}</p>
-      </Card>
+      </div>
     );
   }
 
   if (!status) {
     return (
-      <Card className="flex max-w-xl items-center gap-3 p-5">
+      <div className="flex items-center gap-2.5">
         <Spinner className="size-4 text-muted" />
         <span className="text-small text-muted">{t("ffmpeg.checking")}</span>
-      </Card>
+      </div>
     );
   }
 
@@ -113,23 +102,25 @@ function FfmpegCard() {
   const size = bytes(status.downloadBytes);
 
   return (
-    <div className="flex max-w-xl flex-col gap-3">
-      <Card className="flex flex-col gap-3.5 p-5">
-        <div className="flex items-center justify-between gap-4">
-          <Badge kind={missing ? "warn" : "ok"}>{t(`ffmpeg.${status.source}`)}</Badge>
-          <Button kind={missing ? "primary" : "quiet"} icon="download" onClick={() => void install()}>
-            {missing ? t("ffmpeg.install", { size }) : t("ffmpeg.reinstall", { size })}
-          </Button>
-        </div>
+    <div className="flex flex-col gap-3">
+      <Badge kind={missing ? "warn" : "ok"}>{t(`ffmpeg.${status.source}`)}</Badge>
 
-        {status.version ? (
-          <p className="truncate font-mono text-small text-muted" title={status.path ?? undefined}>
-            {status.version}
-          </p>
-        ) : (
-          <p className="text-small text-muted">{t("ffmpeg.blocked")}</p>
-        )}
-      </Card>
+      {status.version ? (
+        <p className="truncate font-mono text-small text-muted" title={status.path ?? undefined}>
+          {status.version}
+        </p>
+      ) : (
+        <p className="text-small text-muted">{t("ffmpeg.blocked")}</p>
+      )}
+
+      <Button
+        kind={missing ? "primary" : "quiet"}
+        icon="download"
+        onClick={() => void install()}
+        className="w-full"
+      >
+        {missing ? t("ffmpeg.install", { size }) : t("ffmpeg.reinstall", { size })}
+      </Button>
 
       {error ? <Note kind="error">{error}</Note> : null}
     </div>

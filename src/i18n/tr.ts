@@ -9,7 +9,14 @@ export const tr: Messages = {
   "quality.highest": "en yüksek",
   "speed.label": "Hız sınırı",
   "speed.hint": "Anında uygulanır, hâlihazırda süren bir indirmeye de.",
-  "speed.unlimited": "Sınırsız",
+  "speed.on": "Sınırlı",
+  "speed.off": "Sınırsız",
+  "speed.field": "Saniyede kilobayt cinsinden sınır",
+  "speed.example": "Yaklaşık {mb} MB/sn.",
+  "speed.unlimited.hint": "İndirmeler bağlantının izin verdiği hızda ilerler.",
+  "app.madeBy": "made by unsatisfied0",
+  "theme.dark": "Koyu tema",
+  "theme.light": "Açık tema",
   "queue.title": "İndirmeler",
   "nav.settings": "Ayarlar",
 
@@ -99,8 +106,8 @@ export const tr: Messages = {
 
   "settings.language": "Dil",
   "settings.language.hint": "Anında uygulanır, bu bilgisayarda hatırlanır.",
-  "settings.scale": "Arayüz boyutu",
   "settings.motion": "Animasyonlar",
+  "settings.motion.hint": "Kısa giriş ve ilerleme animasyonları.",
   "settings.motion.on": "Açık",
   "settings.motion.off": "Kapalı",
 

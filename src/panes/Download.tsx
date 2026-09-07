@@ -1,6 +1,5 @@
 import { useT } from "../i18n";
-import { SPEED_STEPS, useSpeedLimit } from "../lib/Speed";
-import { Select } from "../lib/ui";
+import { SpeedControl } from "../lib/SpeedControl";
 import { useQueue } from "../lib/Queue";
 import { Setup } from "./Setup";
 import { Queue } from "./Queue";
@@ -32,7 +31,7 @@ export function Download() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display text-mid font-semibold text-body">{t("queue.title")}</h2>
-              <SpeedControl />
+              <SpeedControl compact />
             </div>
             <Queue />
           </div>
@@ -42,23 +41,3 @@ export function Download() {
   );
 }
 
-function SpeedControl() {
-  const t = useT();
-  const { limit, setLimit } = useSpeedLimit();
-  return (
-    <label className="flex shrink-0 items-center gap-2 text-small text-muted">
-      {t("speed.label")}
-      <Select
-        value={String(limit)}
-        onChange={(e) => setLimit(Number(e.target.value))}
-        className="h-7 w-28 text-small"
-      >
-        {SPEED_STEPS.map((step) => (
-          <option key={step} value={step}>
-            {step === 0 ? t("speed.unlimited") : `${step} MB/s`}
-          </option>
-        ))}
-      </Select>
-    </label>
-  );
-}

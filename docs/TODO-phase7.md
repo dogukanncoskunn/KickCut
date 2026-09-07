@@ -1,11 +1,11 @@
-# Phase 7 - release polish
+# Phase 7 - release
 
-## App icon (requested 2026-09-07)
-The placeholder icons are Kick Panel's, which makes the two apps
-indistinguishable in the taskbar and the Start menu.
+Remaining before a downloadable build:
 
-KickCut's icon must be the **inverse**: black background, green **K**
-(`--color-kick` #53fc18 on `--color-ink` #0c110f).
+- NSIS installer settings and artwork
+- A GitHub Actions release workflow: build on a tag, upload the installer
+- README: install, use, and the note that this is for your own broadcasts or
+  content you have permission to keep
 
-Applies to every size in `src-tauri/icons/` and to `icon.ico`, plus the NSIS
-installer artwork.
+The app icon is done - built from the supplied artwork with the white plate
+knocked out, at every size Windows asks for (16 through 256) in `icon.ico`.

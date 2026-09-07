@@ -12,7 +12,14 @@ export const en = {
   "quality.highest": "highest",
   "speed.label": "Speed limit",
   "speed.hint": "Applies straight away, including to a download already running.",
-  "speed.unlimited": "Unlimited",
+  "speed.on": "Limited",
+  "speed.off": "Unlimited",
+  "speed.field": "Limit in kilobytes per second",
+  "speed.example": "About {mb} MB/s.",
+  "speed.unlimited.hint": "Downloads run as fast as the connection allows.",
+  "app.madeBy": "made by unsatisfied0",
+  "theme.dark": "Dark theme",
+  "theme.light": "Light theme",
   "queue.title": "Downloads",
   "nav.settings": "Settings",
 
@@ -102,8 +109,8 @@ export const en = {
 
   "settings.language": "Language",
   "settings.language.hint": "Applies immediately, remembered on this machine.",
-  "settings.scale": "Interface size",
   "settings.motion": "Animations",
+  "settings.motion.hint": "Short entrance and progress animations.",
   "settings.motion.on": "On",
   "settings.motion.off": "Off",
 

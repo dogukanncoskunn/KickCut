@@ -9,7 +9,14 @@ export const de: Messages = {
   "quality.highest": "höchste",
   "speed.label": "Geschwindigkeitslimit",
   "speed.hint": "Wirkt sofort, auch auf einen bereits laufenden Download.",
-  "speed.unlimited": "Unbegrenzt",
+  "speed.on": "Begrenzt",
+  "speed.off": "Unbegrenzt",
+  "speed.field": "Limit in Kilobyte pro Sekunde",
+  "speed.example": "Etwa {mb} MB/s.",
+  "speed.unlimited.hint": "Downloads laufen so schnell, wie die Verbindung erlaubt.",
+  "app.madeBy": "made by unsatisfied0",
+  "theme.dark": "Dunkles Design",
+  "theme.light": "Helles Design",
   "queue.title": "Downloads",
   "nav.settings": "Einstellungen",
 
@@ -99,8 +106,8 @@ export const de: Messages = {
 
   "settings.language": "Sprache",
   "settings.language.hint": "Wirkt sofort, wird auf diesem Rechner gespeichert.",
-  "settings.scale": "Oberflächengröße",
   "settings.motion": "Animationen",
+  "settings.motion.hint": "Kurze Einblend- und Fortschrittsanimationen.",
   "settings.motion.on": "An",
   "settings.motion.off": "Aus",
 

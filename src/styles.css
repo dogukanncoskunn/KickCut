@@ -20,6 +20,19 @@
   --color-amber: #e8a33d;
   --color-rose: #f2555a;
 
+  /*
+   * An accent used as a fill and an accent used as text are not the same
+   * colour. #53fc18 is right filling a button and unreadable as a word on
+   * white, so each accent has a text twin that the light theme darkens while
+   * the fill stays exactly the brand green. --color-onkick is the ink that
+   * goes on top of a filled accent, and is dark in both themes because every
+   * one of these fills is bright.
+   */
+  --color-kick-text: #53fc18;
+  --color-amber-text: #e8a33d;
+  --color-rose-text: #f2555a;
+  --color-onkick: #0c110f;
+
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   /*
@@ -46,20 +59,54 @@
   --z-menu: 50;
 }
 
+/*
+ * The light theme.
+ *
+ * Only the tokens move; not one component knows which theme is running. The
+ * three fills - kick, amber, rose - deliberately do not change, because they
+ * are the brand and they read the same on either ground. What changes is the
+ * text twin of each, which has to be dark enough to read on white.
+ */
+:root[data-theme="light"] {
+  --color-ink: #f2f5f2;
+  --color-surface: #ffffff;
+  --color-raised: #eaefea;
+  --color-line: #d5ddd6;
+  --color-muted: #55645b;
+  --color-body: #131a15;
+
+  --color-kick-text: #1d8a09;
+  --color-amber-text: #8c5a06;
+  --color-rose-text: #c01f24;
+}
+
 html,
 body,
 #root {
   height: 100%;
 }
 
+/* Native controls - the select menus - follow the theme rather than fighting it. */
+:root {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 /*
- * One knob scales the whole app. Everything is in rem, so the root font size
- * is the single place that decides how large the UI is, and it rides on the
- * viewport: 1920x1010 -> 14px, 1366x768 -> ~12px, floor 11px. `--scale` is the
- * manual nudge on top (see Scale.tsx).
+ * One fixed root size, and everything else is in rem, so 14px here is what the
+ * whole type and spacing scale is drawn against.
+ *
+ * It used to ride on the viewport and carry a manual zoom on top. Both are
+ * gone: the app was rendering at a different size depending on the window,
+ * which made it impossible to say what it should look like, and a zoom control
+ * is something the OS already provides. A smaller screen now scrolls, which is
+ * the ordinary answer and a predictable one.
  */
 html {
-  font-size: calc(clamp(11px, min(calc(0.361vw + 7.07px), calc(0.8264vh + 5.653px)), 14px) * var(--scale, 1));
+  font-size: 14px;
 }
 
 body {
@@ -93,6 +140,10 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: #2b342e transparent;
+}
+
+:root[data-theme="light"] * {
+  scrollbar-color: #c2ccc4 transparent;
 }
 
 /*

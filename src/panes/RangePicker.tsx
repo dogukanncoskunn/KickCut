@@ -276,7 +276,7 @@ function TimeBox({
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         className={"font-mono " + (bad ? "border-rose/60" : "")}
       />
-      <span className={"text-small " + (bad ? "text-rose" : "text-muted/80")}>
+      <span className={"text-small " + (bad ? "text-rose-text" : "text-muted/80")}>
         {bad ? invalid : " "}
       </span>
     </label>

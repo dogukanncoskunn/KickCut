@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
-import { useT } from "./i18n";
+import { LOCALES, LOCALE_NAMES, useLocale, useT } from "./i18n";
+import type { Locale } from "./i18n";
 import { ErrorBoundary } from "./lib/ErrorBoundary";
 import { useSelection } from "./lib/Selection";
-import { Icon, Note } from "./lib/ui";
+import { Icon, Note, Select } from "./lib/ui";
 import type { IconName } from "./lib/ui";
 import { Library } from "./panes/Library";
 import { Download } from "./panes/Download";
 import { Settings } from "./panes/Settings";
 import type { MessageKey } from "./i18n/en";
+import { useTheme } from "./lib/Theme";
+import logoDark from "./assets/logo-dark.png";
+import logoLight from "./assets/logo-light.png";
 
 /*
  * Three screens, one useState. There is no router because there are no URLs
@@ -21,7 +25,8 @@ const TABS: { id: TabId; icon: IconName; label: MessageKey; title: MessageKey; w
   { id: "library", icon: "library", label: "nav.library", title: "pane.library.title", width: "78rem" },
   // Wider than the others because it carries the queue rail alongside the form.
   { id: "download", icon: "download", label: "nav.download", title: "pane.setup.title", width: "88rem" },
-  { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "48rem" },
+  // Wide enough for three setting cards on one row.
+  { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "68rem" },
 ];
 
 export function App() {
@@ -49,9 +54,17 @@ export function App() {
         >
           <Icon name="queue" className="size-4" />
         </button>
-        <span className="font-display text-mid font-semibold tracking-tight text-body">
-          {t("app.name")}
-        </span>
+        <Wordmark />
+        {/*
+          Language sits here rather than in Settings. It is the one preference
+          someone may need on any screen - most often because the screen they
+          are looking at is in the wrong language - and making them find
+          Settings first is exactly the wrong place for it.
+        */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <LanguagePicker />
+          <ThemeSwitch />
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -74,12 +87,18 @@ export function App() {
               >
                 <Icon
                   name={x.icon}
-                  className={"size-4 shrink-0 " + (on ? "text-kick" : "text-current")}
+                  className={"size-4 shrink-0 " + (on ? "text-kick-text" : "text-current")}
                 />
                 {navOpen ? <span className="truncate">{t(x.label)}</span> : null}
               </button>
             );
           })}
+
+          {navOpen ? (
+            <span className="mt-auto px-2.5 pb-1 font-mono text-mini text-muted/60">
+              {t("app.madeBy")}
+            </span>
+          ) : null}
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
@@ -105,5 +124,62 @@ export function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+/*
+ * The mark is drawn in near-black ink, so it needs a variant per theme rather
+ * than a filter: the light one is the artwork as drawn, the dark one has its
+ * ink remapped to the body colour. Both are exported at three times the height
+ * they render at, so they stay sharp on a HiDPI screen.
+ */
+function Wordmark() {
+  const t = useT();
+  const { theme } = useTheme();
+  return (
+    <img
+      src={theme === "light" ? logoLight : logoDark}
+      alt={t("app.name")}
+      className="h-5 w-auto select-none"
+      draggable={false}
+    />
+  );
+}
+
+function ThemeSwitch() {
+  const t = useT();
+  const { theme, setTheme } = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(next)}
+      // Shows the theme it will switch to, which is what makes a single-button
+      // toggle readable without a label.
+      title={t(`theme.${next}`)}
+      aria-label={t(`theme.${next}`)}
+      className="grid size-7 place-items-center rounded text-muted transition-colors hover:bg-raised hover:text-body"
+    >
+      <Icon name={next === "light" ? "sun" : "moon"} className="size-4" />
+    </button>
+  );
+}
+
+function LanguagePicker() {
+  const t = useT();
+  const { locale, setLocale } = useLocale();
+  return (
+    <Select
+      value={locale}
+      onChange={(e) => setLocale(e.target.value as Locale)}
+      aria-label={t("settings.language")}
+      className="h-7 w-32 border-transparent bg-transparent text-small hover:border-line"
+    >
+      {LOCALES.map((l) => (
+        <option key={l} value={l}>
+          {LOCALE_NAMES[l]}
+        </option>
+      ))}
+    </Select>
   );
 }

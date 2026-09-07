@@ -369,7 +369,7 @@ export function Setup() {
               >
                 {t("setup.start")}
               </Button>
-              {queued ? <span className="appear text-body text-kick">{t("setup.queued")}</span> : null}
+              {queued ? <span className="appear text-body text-kick-text">{t("setup.queued")}</span> : null}
             </div>
           </div>
         </Section>

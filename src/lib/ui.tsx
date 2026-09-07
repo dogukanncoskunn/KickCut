@@ -34,6 +34,8 @@ const ICONS = {
   scissors:
     "M4 3l8 8.4M12 3 4 11.4M3.6 12.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8M12.4 12.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8",
   chevron: "M6 3.5 10.5 8 6 12.5",
+  sun: "M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6M8 1.6v1.4M8 13v1.4M14.4 8H13M3 8H1.6M12.5 3.5l-1 1M4.5 11.5l-1 1M12.5 12.5l-1-1M4.5 4.5l-1-1",
+  moon: "M13 9.4A5.4 5.4 0 0 1 6.6 3a5.6 5.6 0 1 0 6.4 6.4",
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -123,11 +125,16 @@ export function Columns({ children, min = "22rem" }: { children: ReactNode; min?
 type ButtonKind = "primary" | "quiet" | "danger" | "warn" | "ghost";
 type ButtonSize = "small" | "mid" | "large";
 
+/*
+ * A filled accent keeps the brand colour on either theme and puts dark ink on
+ * top; an outlined one uses the accent's text twin, which the light theme
+ * darkens so it stays readable on white.
+ */
 const buttonClass: Record<ButtonKind, string> = {
-  primary: "bg-kick text-ink hover:bg-kick/90 font-semibold",
+  primary: "bg-kick text-onkick hover:bg-kick/90 font-semibold",
   quiet: "border border-line bg-raised text-body hover:border-muted/40",
-  danger: "border border-rose/40 bg-rose/10 text-rose hover:bg-rose/20",
-  warn: "bg-amber text-ink hover:bg-amber/90 font-semibold",
+  danger: "border border-rose/40 bg-rose/10 text-rose-text hover:bg-rose/20",
+  warn: "bg-amber text-onkick hover:bg-amber/90 font-semibold",
   ghost: "text-muted hover:bg-raised hover:text-body",
 };
 
@@ -226,9 +233,9 @@ export function Toggle({
 type NoteKind = "error" | "warn" | "ok";
 
 const noteClass: Record<NoteKind, string> = {
-  error: "border-rose/40 bg-rose/10 text-rose",
-  warn: "border-amber/40 bg-amber/10 text-amber",
-  ok: "border-kick/40 bg-kick/10 text-kick",
+  error: "border-rose/40 bg-rose/10 text-rose-text",
+  warn: "border-amber/40 bg-amber/10 text-amber-text",
+  ok: "border-kick/40 bg-kick/10 text-kick-text",
 };
 
 const noteIcon: Record<NoteKind, IconName> = { error: "warn", warn: "warn", ok: "check" };
