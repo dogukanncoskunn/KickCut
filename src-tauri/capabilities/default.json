@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Baseline window permissions. Everything privileged is a custom Rust command.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

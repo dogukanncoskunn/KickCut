@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+/*
+ * Palette, carried over from Kick Panel so the two tools read as one family.
+ *
+ * The green is not a general-purpose accent. It is allowed exactly three
+ * meanings here: THIS IS THE PRIMARY ACTION · THIS JOB IS RUNNING · THIS
+ * SUCCEEDED. The other two accents are semantic too:
+ *   amber = this costs you real time (a re-encode, a long download)
+ *   rose  = this destroys work (cancel a job, delete a partial download)
+ */
+@theme {
+  --color-ink: #0c110f;
+  --color-surface: #141a17;
+  --color-raised: #1b231e;
+  --color-line: #232c27;
+  --color-muted: #7e8c84;
+  --color-body: #dfe6e1;
+  --color-kick: #53fc18;
+  --color-amber: #e8a33d;
+  --color-rose: #f2555a;
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  /*
+   * Everything the machine owns is mono: timecodes, durations, byte counts,
+   * segment indices, resolutions, file paths. Everything a person wrote —
+   * stream titles, channel names, labels — stays proportional. This app is
+   * mostly numbers, so the split does a lot of the reading work.
+   */
+  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /*
+   * Type scale: seven steps in rem, nothing outside them. The divisor is 14
+   * because that is the root size at full scale, so these are the pixel values
+   * they stand in for: 11, 12, 13, 15, 18, 24, 32.
+   */
+  --text-mini: 0.7857rem;   /* 11px - badges, table headers */
+  --text-small: 0.8571rem;  /* 12px - meta, timestamps, hints */
+  --text-body: 0.9286rem;   /* 13px - body copy, inputs, buttons */
+  --text-mid: 1.0714rem;    /* 15px - section headings */
+  --text-title: 1.2857rem;  /* 18px - card titles */
+  --text-page: 1.7143rem;   /* 24px - pane titles */
+  --text-figure: 2.2857rem; /* 32px - progress percentages */
+
+  --z-menu: 50;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
+ * One knob scales the whole app. Everything is in rem, so the root font size
+ * is the single place that decides how large the UI is, and it rides on the
+ * viewport: 1920x1010 -> 14px, 1366x768 -> ~12px, floor 11px. `--scale` is the
+ * manual nudge on top (see Scale.tsx).
+ */
+html {
+  font-size: calc(clamp(11px, min(calc(0.361vw + 7.07px), calc(0.8264vh + 5.653px)), 14px) * var(--scale, 1));
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-ink);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Machine values are tabular so a column of durations lines up. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Focus is a keyboard position, not a success state - so it is neutral, not green. */
+*:focus-visible {
+  outline: 2px solid var(--color-body);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2b342e transparent;
+}
+
+/*
+ * The running-job pulse. A download runs for tens of minutes, so this has to
+ * read as ambient state rather than as an alert.
+ */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.dot-running {
+  animation: pulse-soft 3.2s ease-in-out infinite;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-kick) 18%, transparent);
+}
+
+/*
+ * Entrances. 140ms / 4px - long enough to follow, short enough that it never
+ * stands between the user and a click. Only opacity and transform, so the
+ * compositor handles every frame.
+ */
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.appear {
+  animation: appear 140ms ease-out;
+}
+
+/* An indeterminate bar for the stages that cannot report a percentage. */
+@keyframes bar-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.bar-sweep {
+  animation: bar-sweep 1.4s ease-in-out infinite;
+}
+
+/*
+ * Tailwind's own transition-* utilities are not covered by killing the named
+ * keyframes alone, so both reduced-motion paths below reach transitions too.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Same reach, but switched off from inside the app and persisted (Motion.tsx). */
+.motionless,
+.motionless *,
+.motionless *::before,
+.motionless *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
