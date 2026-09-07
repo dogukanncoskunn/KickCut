@@ -24,6 +24,12 @@ export type Rendition = {
   frameRate: number;
   bandwidth: number;
   playlistUrl: string;
+  /**
+   * True when this is the broadcaster's own stream rather than one of Kick's
+   * transcodes. Kick publishes no separate "source" rendition, so this marks
+   * the top rung when its H.264 profile shows it was passed through.
+   */
+  isSource: boolean;
 };
 
 /*
@@ -133,6 +139,9 @@ export const api = {
   pauseJob: (id: string) => invoke<void>("pause_job", { id }),
   resumeJob: (id: string) => invoke<void>("resume_job", { id }),
   cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
+  /** Bytes per second; 0 removes the cap. Applies to a running download. */
+  setSpeedLimit: (bytesPerSecond: number) =>
+    invoke<void>("set_speed_limit", { bytesPerSecond }),
   ffmpegStatus: () => invoke<FfmpegStatus>("ffmpeg_status"),
   installFfmpeg: () => invoke<FfmpegStatus>("install_ffmpeg"),
   renditions: (masterUrl: string) => invoke<Rendition[]>("renditions", { masterUrl }),

@@ -30,6 +30,9 @@ pub struct Rendition {
     pub bandwidth: u64,
     /// Absolute URL of this rendition's media playlist.
     pub playlist_url: String,
+    /// True when this looks like the broadcaster's own stream passed through
+    /// rather than something Kick's transcoder produced. See `mark_source`.
+    pub is_source: bool,
 }
 
 pub fn client() -> Result<reqwest::Client, String> {
@@ -74,7 +77,67 @@ pub async fn renditions(master_url: String) -> Result<Vec<Rendition>, String> {
             .then(b.frame_rate.total_cmp(&a.frame_rate))
             .then(b.bandwidth.cmp(&a.bandwidth))
     });
+    mark_source(&mut list, &parse_profiles(&body));
     Ok(list)
+}
+
+/// Read the H.264 profile out of each `CODECS` attribute, keyed by rendition.
+///
+/// `avc1.PPCCLL` puts profile_idc in the first byte: 0x42 baseline, 0x4D main,
+/// 0x64 high.
+fn parse_profiles(body: &str) -> Vec<(String, u32)> {
+    let mut out = Vec::new();
+    let mut lines = body.lines().map(str::trim).filter(|l| !l.is_empty());
+    while let Some(line) = lines.next() {
+        if !line.starts_with("#EXT-X-STREAM-INF:") {
+            continue;
+        }
+        let Some(uri) = lines.next().filter(|u| !u.starts_with('#')) else {
+            continue;
+        };
+        let name = attr(line, "VIDEO")
+            .map(str::to_string)
+            .or_else(|| uri.split('/').next().map(str::to_string));
+        let profile = attr(line, "CODECS")
+            .and_then(|c| c.split(',').find(|c| c.trim_start().starts_with("avc1.")))
+            .and_then(|c| u32::from_str_radix(c.trim().get(5..7)?, 16).ok());
+        if let (Some(name), Some(profile)) = (name, profile) {
+            out.push((name, profile));
+        }
+    }
+    out
+}
+
+/// Decide whether the top rendition is the broadcaster's own stream.
+///
+/// Kick exposes no separate "source" rendition the way Twitch does - the master
+/// playlist is the complete list, and every path outside it 403s. So the
+/// question is only ever whether the top rung is a passthrough or one more
+/// transcode.
+///
+/// The tell is the H.264 profile. Kick's ladder encodes every rung it makes at
+/// Main, so a top rung arriving at High is not something the ladder produced -
+/// it is what the broadcaster sent. When the top rung matches the rest, this
+/// stays false and the UI calls it the highest quality rather than the source,
+/// because claiming otherwise would be a guess dressed as a fact.
+fn mark_source(list: &mut [Rendition], profiles: &[(String, u32)]) {
+    let profile_of = |name: &str| profiles.iter().find(|(n, _)| n == name).map(|(_, p)| *p);
+    let Some((top, rest)) = list.split_first_mut() else {
+        return;
+    };
+    let Some(top_profile) = profile_of(&top.name) else {
+        return;
+    };
+    // A lone rendition has nothing to compare against; Kick's basic channels
+    // pass those straight through, so it is the source by definition.
+    if rest.is_empty() {
+        top.is_source = true;
+        return;
+    }
+    top.is_source = rest
+        .iter()
+        .filter_map(|r| profile_of(&r.name))
+        .all(|p| top_profile > p);
 }
 
 /* --------------------------------------------------------------- parsing -- */
@@ -136,6 +199,8 @@ pub fn parse_master(body: &str, base_url: &str) -> Result<Vec<Rendition>, String
             frame_rate: attr(line, "FRAME-RATE").and_then(|f| f.parse().ok()).unwrap_or(0.0),
             bandwidth: attr(line, "BANDWIDTH").and_then(|b| b.parse().ok()).unwrap_or(0),
             playlist_url: absolutize(uri, base_url),
+            // Decided across the whole ladder afterwards, not per line.
+            is_source: false,
         });
     }
 
@@ -187,5 +252,39 @@ mod tests {
     #[test]
     fn rejects_a_master_with_no_variants() {
         assert!(parse_master("#EXTM3U\n#EXT-X-VERSION:3\n", "https://x/m.m3u8").is_err());
+    }
+
+    fn ladder(body: &str) -> Vec<Rendition> {
+        let mut list = parse_master(body, "https://x/hls/master.m3u8").expect("parse");
+        list.sort_by(|a, b| (b.width * b.height).cmp(&(a.width * a.height)));
+        mark_source(&mut list, &parse_profiles(body));
+        list
+    }
+
+    /// The real shape: the top rung arrives at High profile while everything
+    /// Kick's ladder produced is Main, which is what identifies a passthrough.
+    #[test]
+    fn a_top_rung_at_a_higher_profile_is_the_broadcaster_s_own_stream() {
+        let list = ladder(MASTER);
+        assert!(list[0].is_source, "1080p60 at High should read as source");
+        assert!(!list[1].is_source, "only the top rung can be the source");
+    }
+
+    /// A ladder encoded uniformly says nothing about where the top came from,
+    /// so the claim is not made.
+    #[test]
+    fn a_uniform_ladder_is_not_claimed_as_source() {
+        let uniform = MASTER.replace("avc1.64002A", "avc1.4D401F");
+        assert!(!ladder(&uniform)[0].is_source);
+    }
+
+    /// Kick's basic channels publish one rendition and pass it straight
+    /// through, so there is nothing to compare and nothing to doubt.
+    #[test]
+    fn a_lone_rendition_is_the_source() {
+        let single = "#EXTM3U\n\
+            #EXT-X-STREAM-INF:BANDWIDTH=6000000,CODECS=\"avc1.4D401F,mp4a.40.2\",RESOLUTION=1280x720,VIDEO=\"720p60\",FRAME-RATE=60.000\n\
+            720p60/playlist.m3u8\n";
+        assert!(ladder(single)[0].is_source);
     }
 }

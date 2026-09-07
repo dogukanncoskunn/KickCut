@@ -4,18 +4,19 @@ export const tr: Messages = {
   "app.name": "KickCut",
 
   "nav.library": "Kitaplık",
-  "nav.setup": "İndirme",
-  "nav.queue": "Kuyruk",
+  "nav.download": "İndirme",
+  "quality.source": "kaynak",
+  "quality.highest": "en yüksek",
+  "speed.label": "Hız sınırı",
+  "speed.hint": "Anında uygulanır, hâlihazırda süren bir indirmeye de.",
+  "speed.unlimited": "Sınırsız",
+  "queue.title": "İndirmeler",
   "nav.settings": "Ayarlar",
 
   "pane.library.title": "Yayın geçmişi",
   "pane.setup.title": "İndirme ayarları",
-  "pane.queue.title": "Kuyruk",
   "pane.settings.title": "Ayarlar",
 
-  "common.retry": "Tekrar dene",
-  "common.refresh": "Yenile",
-  "common.cancel": "İptal",
   "common.loading": "Yükleniyor…",
 
   "library.channel.label": "Kanal",
@@ -103,7 +104,6 @@ export const tr: Messages = {
   "settings.motion.on": "Açık",
   "settings.motion.off": "Kapalı",
 
-  "error.title": "Bir şeyler ters gitti",
   "error.boundary": "Bu ekran çöktü. Sekme değiştirince sıfırlanır.",
 
   "empty.library": "Yayın geçmişini listelemek için yukarıya bir kanal adı yaz.",

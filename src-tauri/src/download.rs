@@ -26,6 +26,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::hls::parse_media;
 use crate::kick::{client, get_text};
 use crate::mux::{self, MuxMode};
+use crate::rate::RateLimiter;
 
 /// Concurrent segment requests. Eight saturates a fast connection without
 /// making the app the reason the rest of the machine feels slow.
@@ -116,6 +117,8 @@ pub struct Downloads {
     /// Live counters for the running job, so progress does not restat the
     /// directory several times a second.
     live: Mutex<Option<Live>>,
+    /// Shared by every worker of every job, and adjustable mid-download.
+    pub limiter: Arc<RateLimiter>,
 }
 
 struct Live {
@@ -133,6 +136,7 @@ impl Default for Downloads {
             control: Mutex::new(None),
             muxing: Mutex::new(None),
             live: Mutex::new(None),
+            limiter: Arc::new(RateLimiter::default()),
         }
     }
 }
@@ -530,6 +534,7 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
     }
 
     let http = client()?;
+    let limiter = app.state::<Downloads>().limiter.clone();
     // No more workers than there is work: a three-segment resume should not
     // open eight connections.
     let worker_count = DEFAULT_CONCURRENCY.min(todo.len());
@@ -547,6 +552,7 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
         let segments_done = segments_done.clone();
         let bytes_done = bytes_done.clone();
         let dir = dir.clone();
+        let limiter = limiter.clone();
         let urls: Vec<String> = playlist.segments.iter().map(|s| s.url.clone()).collect();
 
         workers.push(tauri::async_runtime::spawn(async move {
@@ -562,7 +568,7 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
                     return;
                 };
 
-                match fetch_segment(&http, &urls[index], &dir, index, &control).await {
+                match fetch_segment(&http, &urls[index], &dir, index, &control, &limiter).await {
                     Ok(Some(len)) => {
                         bytes_done.fetch_add(len, Ordering::Relaxed);
                         segments_done.fetch_add(1, Ordering::Relaxed);
@@ -630,13 +636,14 @@ async fn fetch_segment(
     dir: &Path,
     index: usize,
     control: &Control,
+    limiter: &RateLimiter,
 ) -> Result<Option<u64>, String> {
     let part = dir.join(format!("{index}.part"));
     let final_path = dir.join(format!("{index}.ts"));
     let mut delay = Duration::from_millis(400);
 
     for attempt in 1..=MAX_ATTEMPTS {
-        match stream_to_file(http, url, &part, control).await {
+        match stream_to_file(http, url, &part, control, limiter).await {
             Ok(Some(len)) => {
                 tokio::fs::rename(&part, &final_path)
                     .await
@@ -667,6 +674,7 @@ async fn stream_to_file(
     url: &str,
     path: &Path,
     control: &Control,
+    limiter: &RateLimiter,
 ) -> Result<Option<u64>, String> {
     use tokio::io::AsyncWriteExt;
 
@@ -684,8 +692,9 @@ async fn stream_to_file(
     let mut written = 0u64;
 
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-        // Checked between chunks, so a pause takes effect in well under a
-        // second even mid-segment.
+        limiter.take(chunk.len() as u64).await;
+        // Checked after the throttle wait, not before: a pause pressed during a
+        // long wait should land as soon as it ends, not one chunk later.
         if control.pause.load(Ordering::Relaxed) || control.cancel.load(Ordering::Relaxed) {
             return Ok(None);
         }
@@ -785,6 +794,15 @@ pub async fn enqueue_job(app: AppHandle, job: NewJob) -> Result<String, String> 
 fn next_sequence() -> u64 {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Cap the download rate, in bytes per second. Zero removes the cap.
+///
+/// Takes effect on the next chunk of whatever is already running, which is the
+/// only time anyone actually reaches for this.
+#[tauri::command]
+pub fn set_speed_limit(app: AppHandle, bytes_per_second: u64) {
+    app.state::<Downloads>().limiter.set(bytes_per_second);
 }
 
 #[tauri::command]

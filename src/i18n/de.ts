@@ -4,18 +4,19 @@ export const de: Messages = {
   "app.name": "KickCut",
 
   "nav.library": "Bibliothek",
-  "nav.setup": "Download",
-  "nav.queue": "Warteschlange",
+  "nav.download": "Download",
+  "quality.source": "Quelle",
+  "quality.highest": "höchste",
+  "speed.label": "Geschwindigkeitslimit",
+  "speed.hint": "Wirkt sofort, auch auf einen bereits laufenden Download.",
+  "speed.unlimited": "Unbegrenzt",
+  "queue.title": "Downloads",
   "nav.settings": "Einstellungen",
 
   "pane.library.title": "Stream-Verlauf",
   "pane.setup.title": "Download-Einstellungen",
-  "pane.queue.title": "Warteschlange",
   "pane.settings.title": "Einstellungen",
 
-  "common.retry": "Erneut versuchen",
-  "common.refresh": "Aktualisieren",
-  "common.cancel": "Abbrechen",
   "common.loading": "Wird geladen…",
 
   "library.channel.label": "Kanal",
@@ -103,7 +104,6 @@ export const de: Messages = {
   "settings.motion.on": "An",
   "settings.motion.off": "Aus",
 
-  "error.title": "Etwas ist schiefgelaufen",
   "error.boundary": "Diese Ansicht ist abgestürzt. Ein Tab-Wechsel setzt sie zurück.",
 
   "empty.library": "Gib oben einen Kanalnamen ein, um vergangene Streams zu listen.",

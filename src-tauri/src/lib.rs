@@ -3,6 +3,7 @@ mod ffmpeg;
 mod hls;
 mod kick;
 mod mux;
+mod rate;
 
 /// Entry point, kept in the library rather than in `main.rs` so integration
 /// tests and future platform shims can call it.
@@ -23,6 +24,7 @@ pub fn run() {
             download::pause_job,
             download::resume_job,
             download::cancel_job,
+            download::set_speed_limit,
         ])
         .run(tauri::generate_context!())
         .expect("KickCut could not start");

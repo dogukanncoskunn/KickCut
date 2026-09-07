@@ -3,6 +3,7 @@ import type { Locale } from "../i18n";
 import { useFfmpeg } from "../lib/Ffmpeg";
 import { bytes } from "../lib/format";
 import { useMotion } from "../lib/Motion";
+import { SPEED_STEPS, useSpeedLimit } from "../lib/Speed";
 import { SCALE_MAX, SCALE_MIN, SCALE_STEP, useScale } from "../lib/Scale";
 import { Badge, Button, Card, Field, Note, ProgressBar, Section, Select, Spinner, Toggle } from "../lib/ui";
 
@@ -11,11 +12,26 @@ export function Settings() {
   const { locale, setLocale } = useLocale();
   const { motion, setMotion } = useMotion();
   const { scale, setScale } = useScale();
+  const speed = useSpeedLimit();
 
   return (
     <div className="flex flex-col gap-8">
       <Section title={t("ffmpeg.title")} hint={t("ffmpeg.hint")}>
         <FfmpegCard />
+      </Section>
+
+      <Section title={t("speed.label")} hint={t("speed.hint")}>
+        <Card className="max-w-sm p-4">
+          <Field label={t("speed.label")}>
+            <Select value={String(speed.limit)} onChange={(e) => speed.setLimit(Number(e.target.value))}>
+              {SPEED_STEPS.map((step) => (
+                <option key={step} value={step}>
+                  {step === 0 ? t("speed.unlimited") : `${step} MB/s`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </Card>
       </Section>
 
       <Section title={t("settings.language")} hint={t("settings.language.hint")}>

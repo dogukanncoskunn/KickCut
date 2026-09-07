@@ -1,26 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useT } from "./i18n";
 import { ErrorBoundary } from "./lib/ErrorBoundary";
+import { useSelection } from "./lib/Selection";
 import { Icon, Note } from "./lib/ui";
 import type { IconName } from "./lib/ui";
 import { Library } from "./panes/Library";
-import { Setup } from "./panes/Setup";
-import { Queue } from "./panes/Queue";
+import { Download } from "./panes/Download";
 import { Settings } from "./panes/Settings";
 import type { MessageKey } from "./i18n/en";
 
 /*
- * Four screens, one useState. There is no router because there are no URLs
+ * Three screens, one useState. There is no router because there are no URLs
  * worth addressing in a desktop tool, and no state library because the only
- * thing shared across panes is the selected VOD and the job list, which arrive
- * in later phases as one context each.
+ * things shared across panes are the selected broadcast and the job queue,
+ * which have a small context each.
  */
-type TabId = "library" | "setup" | "queue" | "settings";
+type TabId = "library" | "download" | "settings";
 
 const TABS: { id: TabId; icon: IconName; label: MessageKey; title: MessageKey; width: string }[] = [
   { id: "library", icon: "library", label: "nav.library", title: "pane.library.title", width: "78rem" },
-  { id: "setup", icon: "scissors", label: "nav.setup", title: "pane.setup.title", width: "62rem" },
-  { id: "queue", icon: "queue", label: "nav.queue", title: "pane.queue.title", width: "62rem" },
+  // Wider than the others because it carries the queue rail alongside the form.
+  { id: "download", icon: "download", label: "nav.download", title: "pane.setup.title", width: "88rem" },
   { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "48rem" },
 ];
 
@@ -28,6 +28,13 @@ export function App() {
   const t = useT();
   const [tab, setTab] = useState<TabId>("library");
   const [navOpen, setNavOpen] = useState(true);
+  const { vod } = useSelection();
+
+  // Choosing a broadcast is the start of setting up a download, so it moves
+  // there rather than leaving the user to notice a tab has become useful.
+  useEffect(() => {
+    if (vod) setTab("download");
+  }, [vod]);
 
   const active = TABS.find((x) => x.id === tab)!;
 
@@ -91,8 +98,7 @@ export function App() {
               )}
             >
               {tab === "library" ? <Library /> : null}
-              {tab === "setup" ? <Setup /> : null}
-              {tab === "queue" ? <Queue /> : null}
+              {tab === "download" ? <Download /> : null}
               {tab === "settings" ? <Settings /> : null}
             </ErrorBoundary>
           </div>

@@ -7,18 +7,19 @@ export const en = {
   "app.name": "KickCut",
 
   "nav.library": "Library",
-  "nav.setup": "Download",
-  "nav.queue": "Queue",
+  "nav.download": "Download",
+  "quality.source": "source",
+  "quality.highest": "highest",
+  "speed.label": "Speed limit",
+  "speed.hint": "Applies straight away, including to a download already running.",
+  "speed.unlimited": "Unlimited",
+  "queue.title": "Downloads",
   "nav.settings": "Settings",
 
   "pane.library.title": "Stream history",
   "pane.setup.title": "Download setup",
-  "pane.queue.title": "Queue",
   "pane.settings.title": "Settings",
 
-  "common.retry": "Try again",
-  "common.refresh": "Refresh",
-  "common.cancel": "Cancel",
   "common.loading": "Loading…",
 
   "library.channel.label": "Channel",
@@ -106,7 +107,6 @@ export const en = {
   "settings.motion.on": "On",
   "settings.motion.off": "Off",
 
-  "error.title": "Something went wrong",
   "error.boundary": "This screen crashed. Switching tabs resets it.",
 
   "empty.library": "Type a channel name above to list its past broadcasts.",
