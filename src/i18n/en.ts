@@ -22,11 +22,12 @@ export const en = {
   "common.loading": "Loading…",
 
   "library.channel.label": "Channel",
-  "library.channel.placeholder": "e.g. xqc",
+  "library.channel.placeholder": "e.g. unsatisfied0",
   "library.channel.hint": "Kick only serves the most recent broadcasts. For an older one, paste its link.",
   "library.channel.submit": "List broadcasts",
   "library.link.label": "Or paste a VOD link",
   "library.link.placeholder": "kick.com/channel/videos/…",
+  "library.link.hint": "Reaches any broadcast, including ones older than the list above.",
   "library.link.submit": "Open",
   "library.results": "{count} broadcasts from {channel}",
   "library.select": "Select",

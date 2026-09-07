@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useLocale, useT } from "../i18n";
-import { api } from "../lib/api";
 import type { Vod } from "../lib/api";
+import { channelVods, resolveVod } from "../lib/kickApi";
 import { cleanError } from "../lib/errors";
 import { compactCount, shortDate, timecode } from "../lib/format";
 import { useSelection } from "../lib/Selection";
-import { Badge, Button, Card, Columns, EmptyState, Field, Icon, Input, Note, Skeleton } from "../lib/ui";
+import { Badge, Button, Card, Columns, EmptyState, Icon, Input, Note, Skeleton } from "../lib/ui";
+import type { IconName } from "../lib/ui";
 
 /*
  * Two ways in, on purpose. The channel box covers the normal case and removes
@@ -31,7 +32,7 @@ export function Library() {
     setBusy("channel");
     setError(null);
     try {
-      const vods = await api.channelVods(channel);
+      const vods = await channelVods(channel);
       setResults({ channel: vods[0]?.channel || channel.trim(), vods });
     } catch (err) {
       setError(cleanError(err));
@@ -47,7 +48,7 @@ export function Library() {
     setBusy("link");
     setError(null);
     try {
-      const one = await api.resolveVod(link);
+      const one = await resolveVod(link);
       setResults({ channel: one.channel, vods: [one] });
       select(one);
     } catch (err) {
@@ -59,45 +60,41 @@ export function Library() {
 
   return (
     <div className="flex flex-col gap-7">
-      <div className="flex flex-wrap items-end gap-4">
-        <form onSubmit={listChannel} className="flex min-w-[18rem] flex-1 items-end gap-2">
-          <div className="flex-1">
-            <Field label={t("library.channel.label")} hint={t("library.channel.hint")}>
-              <Input
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-                placeholder={t("library.channel.placeholder")}
-                spellCheck={false}
-                autoFocus
-              />
-            </Field>
-          </div>
-          <Button
-            type="submit"
-            kind="primary"
-            icon="search"
-            disabled={!channel.trim() || busy !== null}
-            className="mb-6"
-          >
-            {busy === "channel" ? t("common.loading") : t("library.channel.submit")}
-          </Button>
-        </form>
-
-        <form onSubmit={openLink} className="flex min-w-[18rem] flex-1 items-end gap-2">
-          <div className="flex-1">
-            <Field label={t("library.link.label")}>
-              <Input
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                placeholder={t("library.link.placeholder")}
-                spellCheck={false}
-              />
-            </Field>
-          </div>
-          <Button type="submit" disabled={!link.trim() || busy !== null}>
-            {busy === "link" ? t("common.loading") : t("library.link.submit")}
-          </Button>
-        </form>
+      {/*
+        Both entry points get the identical three-row shape - label, control
+        row, hint - so their baselines line up whatever the copy length or the
+        interface scale. Anything that gives one form a row the other lacks
+        pulls the two out of alignment.
+      */}
+      <div
+        className="grid items-start gap-x-6 gap-y-5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(24rem, 1fr))" }}
+      >
+        <SearchRow
+          label={t("library.channel.label")}
+          hint={t("library.channel.hint")}
+          value={channel}
+          onValue={setChannel}
+          placeholder={t("library.channel.placeholder")}
+          onSubmit={listChannel}
+          submitLabel={busy === "channel" ? t("common.loading") : t("library.channel.submit")}
+          submitKind="primary"
+          submitIcon="search"
+          busy={busy !== null}
+          autoFocus
+        />
+        <SearchRow
+          label={t("library.link.label")}
+          hint={t("library.link.hint")}
+          value={link}
+          onValue={setLink}
+          placeholder={t("library.link.placeholder")}
+          onSubmit={openLink}
+          submitLabel={busy === "link" ? t("common.loading") : t("library.link.submit")}
+          submitKind="quiet"
+          submitIcon="download"
+          busy={busy !== null}
+        />
       </div>
 
       {error ? <Note kind="error">{error}</Note> : null}
@@ -205,5 +202,60 @@ function VodCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/*
+ * One entry point: a label, an input paired with its submit button, and a hint.
+ * Both forms on this screen render through it, which is what keeps them
+ * symmetric - the shape cannot drift between them because there is only one.
+ */
+function SearchRow({
+  label,
+  hint,
+  value,
+  onValue,
+  placeholder,
+  onSubmit,
+  submitLabel,
+  submitKind,
+  submitIcon,
+  busy,
+  autoFocus,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  onValue: (v: string) => void;
+  placeholder: string;
+  onSubmit: (e: FormEvent) => void;
+  submitLabel: string;
+  submitKind: "primary" | "quiet";
+  submitIcon: IconName;
+  busy: boolean;
+  autoFocus?: boolean;
+}) {
+  const id = "field-" + label.replace(/W+/g, "-").toLowerCase();
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-small font-medium text-muted">
+        {label}
+      </label>
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          value={value}
+          onChange={(e) => onValue(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          autoFocus={autoFocus}
+          className="min-w-0 flex-1"
+        />
+        <Button type="submit" kind={submitKind} icon={submitIcon} disabled={!value.trim() || busy}>
+          {submitLabel}
+        </Button>
+      </div>
+      <span className="text-small text-muted/80">{hint}</span>
+    </form>
   );
 }

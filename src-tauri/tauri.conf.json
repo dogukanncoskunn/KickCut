@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://images.kick.com https://files.kick.com; connect-src ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://images.kick.com https://files.kick.com; connect-src ipc: http://ipc.localhost https://kick.com https://stream.kick.com"
     }
   },
   "bundle": {

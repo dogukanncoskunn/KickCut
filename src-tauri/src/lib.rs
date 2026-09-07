@@ -4,11 +4,7 @@ mod kick;
 /// tests and future platform shims can call it.
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            kick::channel_vods,
-            kick::resolve_vod,
-            kick::renditions,
-        ])
+        .invoke_handler(tauri::generate_handler![kick::renditions])
         .run(tauri::generate_context!())
         .expect("KickCut could not start");
 }

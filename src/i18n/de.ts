@@ -19,11 +19,12 @@ export const de: Messages = {
   "common.loading": "Wird geladen…",
 
   "library.channel.label": "Kanal",
-  "library.channel.placeholder": "z. B. xqc",
+  "library.channel.placeholder": "z. B. unsatisfied0",
   "library.channel.hint": "Kick liefert nur die neuesten Streams. Für ältere den Link einfügen.",
   "library.channel.submit": "Streams anzeigen",
   "library.link.label": "Oder VOD-Link einfügen",
   "library.link.placeholder": "kick.com/kanal/videos/…",
+  "library.link.hint": "Erreicht auch Streams, die älter sind als die Liste oben.",
   "library.link.submit": "Öffnen",
   "library.results": "{count} Streams von {channel}",
   "library.select": "Auswählen",

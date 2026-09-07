@@ -19,11 +19,12 @@ export const tr: Messages = {
   "common.loading": "Yükleniyor…",
 
   "library.channel.label": "Kanal",
-  "library.channel.placeholder": "örn. xqc",
+  "library.channel.placeholder": "örn. unsatisfied0",
   "library.channel.hint": "Kick yalnızca son yayınları veriyor. Daha eskisi için linkini yapıştır.",
   "library.channel.submit": "Yayınları listele",
   "library.link.label": "Ya da VOD linki yapıştır",
   "library.link.placeholder": "kick.com/kanal/videos/…",
+  "library.link.hint": "Yukarıdaki listede olmayan eski yayınlara da bu şekilde ulaşırsın.",
   "library.link.submit": "Aç",
   "library.results": "{channel} kanalından {count} yayın",
   "library.select": "Seç",

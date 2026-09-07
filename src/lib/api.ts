@@ -26,8 +26,11 @@ export type Rendition = {
   playlistUrl: string;
 };
 
+/*
+ * Only `stream.kick.com` work crosses into Rust. The `kick.com/api` metadata
+ * calls live in `kickApi.ts` and run in the webview instead - see the comment
+ * at the top of that file for why.
+ */
 export const api = {
-  channelVods: (slug: string) => invoke<Vod[]>("channel_vods", { slug }),
-  resolveVod: (input: string) => invoke<Vod>("resolve_vod", { input }),
   renditions: (masterUrl: string) => invoke<Rendition[]>("renditions", { masterUrl }),
 };
