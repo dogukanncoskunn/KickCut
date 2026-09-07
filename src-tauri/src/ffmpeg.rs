@@ -111,7 +111,16 @@ async fn probe_version(bin: &Path) -> Option<String> {
 
 /// Locate a usable pair of binaries, or report why not.
 pub async fn locate(app: &AppHandle) -> Result<(Status, Option<Tools>), String> {
-    let dir = managed_dir(app)?;
+    resolve(&managed_dir(app)?).await
+}
+
+/// The resolution order itself, with the managed directory passed in.
+///
+/// Split from `locate` so it can be tested against a real ffmpeg without a
+/// running Tauri app - "do I still have to install it if I already have
+/// ffmpeg?" is the first thing anyone asks, and the answer deserves a test
+/// rather than an assurance.
+pub async fn resolve(dir: &Path) -> Result<(Status, Option<Tools>), String> {
     let candidates = [
         (
             Source::Managed,
@@ -382,6 +391,66 @@ mod tests {
         }
         assert_eq!(SHA256.len(), 64);
         assert!(SHA256.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+    }
+
+    /// Copy a real ffmpeg pair into `dir`, or skip the test if none is around.
+    ///
+    /// Looks for the managed copy this app installs, then anything on PATH.
+    fn borrow_real_binaries(dir: &Path) -> bool {
+        let sources: Vec<PathBuf> = std::env::var_os("KICKCUT_TEST_FFMPEG_DIR")
+            .map(|d| vec![PathBuf::from(d)])
+            .unwrap_or_default();
+
+        for source in sources {
+            let ffmpeg = source.join(format!("ffmpeg{EXE}"));
+            let ffprobe = source.join(format!("ffprobe{EXE}"));
+            if ffmpeg.is_file() && ffprobe.is_file() {
+                std::fs::create_dir_all(dir).unwrap();
+                std::fs::copy(&ffmpeg, dir.join(format!("ffmpeg{EXE}"))).unwrap();
+                std::fs::copy(&ffprobe, dir.join(format!("ffprobe{EXE}"))).unwrap();
+                return true;
+            }
+        }
+        false
+    }
+
+    /// An ffmpeg already on the machine is used as-is.
+    ///
+    /// This is the question every first-time user asks, so it is answered by
+    /// running the real resolution order against a real binary rather than by
+    /// reading the code. Set `KICKCUT_TEST_FFMPEG_DIR` to a folder holding
+    /// ffmpeg and ffprobe, then run with `--ignored`.
+    #[tokio::test]
+    #[ignore = "needs a real ffmpeg; set KICKCUT_TEST_FFMPEG_DIR"]
+    async fn an_ffmpeg_already_on_path_is_found_and_nothing_is_downloaded() {
+        let root = std::env::temp_dir().join("kickcut-resolve-test");
+        let _ = std::fs::remove_dir_all(&root);
+        let on_path = root.join("on-path");
+        let managed = root.join("managed");
+        std::fs::create_dir_all(&managed).unwrap();
+
+        if !borrow_real_binaries(&on_path) {
+            eprintln!("no ffmpeg to borrow; set KICKCUT_TEST_FFMPEG_DIR");
+            return;
+        }
+
+        // The managed directory is empty, exactly as it is on a fresh install.
+        let previous = std::env::var("PATH").unwrap_or_default();
+        std::env::set_var("PATH", format!("{};{previous}", on_path.display()));
+
+        let (status, tools) = resolve(&managed).await.expect("resolve");
+        assert_eq!(status.source, Source::System, "should have used the machine's own copy");
+        assert!(status.version.is_some_and(|v| v.contains("version")));
+        assert!(tools.is_some(), "both binaries should have resolved");
+
+        // Now give the managed directory its own copy: it must win, so that a
+        // later PATH change cannot swap the binary under a running job.
+        assert!(borrow_real_binaries(&managed));
+        let (status, _) = resolve(&managed).await.expect("resolve");
+        assert_eq!(status.source, Source::Managed, "our own copy must take precedence");
+
+        std::env::set_var("PATH", previous);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The real install, end to end.
