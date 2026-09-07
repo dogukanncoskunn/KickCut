@@ -87,18 +87,40 @@ pub fn free_output_path(dir: &Path, stem: &str) -> PathBuf {
     dir.join(format!("{stem} ({}).mp4", std::process::id()))
 }
 
+/// Everything about one assembly except where the binaries are.
+///
+/// These six travelled as loose parameters and it was three too many to read
+/// at a call site - two `f64` seconds in a row is exactly the shape that gets
+/// silently swapped. Grouped, the caller has to name each one.
+#[derive(Debug, Clone)]
+pub struct MuxRequest {
+    /// The concat script; segments are resolved relative to its directory.
+    pub concat_list: PathBuf,
+    pub output: PathBuf,
+    pub mode: MuxMode,
+    /// Seconds to drop from the front of the first segment.
+    pub trim_offset: f64,
+    /// Length of the finished file.
+    pub output_seconds: f64,
+    /// Only used when re-encoding, to pin a constant frame rate.
+    pub frame_rate: f64,
+}
+
 /// Build the argument list.
 ///
 /// Split out from the run so the flag choices above can be asserted in tests
 /// rather than only discovered when a file misbehaves in an editor.
-pub fn build_args(
-    concat_list: &Path,
-    output: &Path,
-    mode: MuxMode,
-    trim_offset: f64,
-    output_seconds: f64,
-    frame_rate: f64,
-) -> Vec<String> {
+pub fn build_args(request: &MuxRequest) -> Vec<String> {
+    let MuxRequest {
+        concat_list,
+        output,
+        mode,
+        trim_offset,
+        output_seconds,
+        frame_rate,
+    } = request;
+    let (mode, trim_offset, output_seconds, frame_rate) =
+        (*mode, *trim_offset, *output_seconds, *frame_rate);
     let mut args: Vec<String> = vec![
         "-hide_banner".into(),
         "-nostdin".into(),
@@ -179,16 +201,12 @@ pub fn build_args(
 /// Run ffmpeg, reporting progress as a 0..1 fraction.
 pub async fn run(
     tools: &Tools,
-    concat_list: &Path,
-    output: &Path,
-    mode: MuxMode,
-    trim_offset: f64,
-    output_seconds: f64,
-    frame_rate: f64,
+    request: &MuxRequest,
     cancel: &AtomicBool,
     progress: &(impl Fn(f64) + Send + Sync),
 ) -> Result<(), String> {
-    let args = build_args(concat_list, output, mode, trim_offset, output_seconds, frame_rate);
+    let args = build_args(request);
+    let output = request.output.as_path();
 
     let mut command = tokio::process::Command::new(&tools.ffmpeg);
     command
@@ -219,7 +237,7 @@ pub async fn run(
         kept
     });
 
-    let total_us = (output_seconds * 1_000_000.0).max(1.0);
+    let total_us = (request.output_seconds * 1_000_000.0).max(1.0);
     let mut lines = BufReader::new(stdout).lines();
     while let Ok(Some(line)) = lines.next_line().await {
         if cancel.load(Ordering::Relaxed) {
@@ -333,14 +351,14 @@ mod tests {
     use super::*;
 
     fn args_of(mode: MuxMode, trim: f64) -> Vec<String> {
-        build_args(
-            Path::new("C:/parts/x/concat.txt"),
-            Path::new("C:/out/clip.mp4"),
+        build_args(&MuxRequest {
+            concat_list: PathBuf::from("C:/parts/x/concat.txt"),
+            output: PathBuf::from("C:/out/clip.mp4"),
             mode,
-            trim,
-            12600.0,
-            60.0,
-        )
+            trim_offset: trim,
+            output_seconds: 12600.0,
+            frame_rate: 60.0,
+        })
     }
 
     /// The three flags this module exists for. If any of them is dropped, the

@@ -471,12 +471,14 @@ async fn assemble(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<
     let reporter = fraction.clone();
     let result = mux::run(
         &tools,
-        &list,
-        &output,
-        job.mux_mode,
-        job.trim_offset,
-        job.output_seconds,
-        job.frame_rate,
+        &mux::MuxRequest {
+            concat_list: list,
+            output: output.clone(),
+            mode: job.mux_mode,
+            trim_offset: job.trim_offset,
+            output_seconds: job.output_seconds,
+            frame_rate: job.frame_rate,
+        },
         &control.cancel,
         &move |done| mux::store_fraction(&reporter, done),
     )
