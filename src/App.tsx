@@ -3,7 +3,7 @@ import { LOCALES, LOCALE_NAMES, useLocale, useT } from "./i18n";
 import type { Locale } from "./i18n";
 import { ErrorBoundary } from "./lib/ErrorBoundary";
 import { useSelection } from "./lib/Selection";
-import { Icon, Note, Select } from "./lib/ui";
+import { Dropdown, Icon, Note } from "./lib/ui";
 import type { IconName } from "./lib/ui";
 import { Library } from "./panes/Library";
 import { Download } from "./panes/Download";
@@ -95,7 +95,7 @@ export function App() {
           })}
 
           {navOpen ? (
-            <span className="mt-auto px-2.5 pb-1 font-mono text-mini text-muted/60">
+            <span className="mt-auto px-2.5 pb-1 font-mono text-mini text-body/70">
               {t("app.madeBy")}
             </span>
           ) : null}
@@ -146,21 +146,44 @@ function Wordmark() {
   );
 }
 
+/*
+ * A physical switch rather than a button that swaps its icon.
+ *
+ * The knob carries the theme that is currently on and slides to the side that
+ * theme lives on - left for light, right for dark - so the control shows its
+ * state at rest instead of only announcing what a click would do. Both faces
+ * are rendered and cross-faded, because swapping the icon at the end of the
+ * travel reads as a glitch rather than as the same object turning over.
+ */
 function ThemeSwitch() {
   const t = useT();
   const { theme, setTheme } = useTheme();
-  const next = theme === "dark" ? "light" : "dark";
+  const dark = theme === "dark";
+  const next = dark ? "light" : "dark";
+
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={dark}
       onClick={() => setTheme(next)}
-      // Shows the theme it will switch to, which is what makes a single-button
-      // toggle readable without a label.
       title={t(`theme.${next}`)}
       aria-label={t(`theme.${next}`)}
-      className="grid size-7 place-items-center rounded text-muted transition-colors hover:bg-raised hover:text-body"
+      className="relative h-6 w-11 shrink-0 rounded-full border border-line bg-ink transition-colors hover:border-muted/40"
     >
-      <Icon name={next === "light" ? "sun" : "moon"} className="size-4" />
+      <span
+        className="absolute top-0.5 grid size-4.5 place-items-center rounded-full bg-raised text-body shadow transition-[left] duration-200 ease-out"
+        style={{ left: dark ? "1.4rem" : "0.15rem" }}
+      >
+        <Icon
+          name="sun"
+          className={"absolute size-3 transition-opacity duration-200 " + (dark ? "opacity-0" : "opacity-100 text-amber-text")}
+        />
+        <Icon
+          name="moon"
+          className={"absolute size-3 transition-opacity duration-200 " + (dark ? "opacity-100" : "opacity-0")}
+        />
+      </span>
     </button>
   );
 }
@@ -169,17 +192,12 @@ function LanguagePicker() {
   const t = useT();
   const { locale, setLocale } = useLocale();
   return (
-    <Select
+    <Dropdown
       value={locale}
-      onChange={(e) => setLocale(e.target.value as Locale)}
-      aria-label={t("settings.language")}
+      options={LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
+      onChange={(next) => setLocale(next as Locale)}
+      ariaLabel={t("settings.language")}
       className="h-7 w-32 border-transparent bg-transparent text-small hover:border-line"
-    >
-      {LOCALES.map((l) => (
-        <option key={l} value={l}>
-          {LOCALE_NAMES[l]}
-        </option>
-      ))}
-    </Select>
+    />
   );
 }

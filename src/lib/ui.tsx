@@ -1,4 +1,6 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 
 /*
  * The whole component kit, hand-rolled. No component library, no icon package:
@@ -189,11 +191,122 @@ export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInput
   return <input {...rest} className={controlClass + " " + className} />;
 }
 
-export function Select({ className = "", children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+export type Option = { value: string; label: string };
+
+/*
+ * A dropdown of our own rather than a native <select>.
+ *
+ * The native one draws its popup through the OS, which ignores the palette
+ * entirely: on this dark theme it came up as a white list with washed-out
+ * items, and no amount of CSS reaches inside it. So the menu is ours, rendered
+ * into a portal - inside the layout it would be clipped by the header's own
+ * overflow, and it has to be able to escape it.
+ */
+export function Dropdown({
+  value,
+  options,
+  onChange,
+  className = "",
+  ariaLabel,
+}: {
+  value: string;
+  options: readonly Option[];
+  onChange: (value: string) => void;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  const anchor = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [box, setBox] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  const current = options.find((o) => o.value === value);
+
+  // Measured before paint, so the menu never appears at the wrong place first.
+  useLayoutEffect(() => {
+    if (!open || !anchor.current) return;
+    const r = anchor.current.getBoundingClientRect();
+    setBox({ left: r.left, top: r.bottom + 4, width: Math.max(r.width, 140) });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!anchor.current?.contains(target) && !menu.current?.contains(target)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    // A menu positioned once would drift away from its button on scroll or
+    // resize, so it closes instead of chasing.
+    const close = () => setOpen(false);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
   return (
-    <select {...rest} className={controlClass + " cursor-pointer pr-8 " + className}>
-      {children}
-    </select>
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        onClick={() => setOpen((v) => !v)}
+        className={
+          "flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-line bg-ink px-2.5 text-body text-body transition-colors hover:border-muted/30 " +
+          className
+        }
+      >
+        <span className="truncate">{current?.label ?? value}</span>
+        <Icon name="chevron" className={"size-3.5 shrink-0 text-muted transition-transform " + (open ? "-rotate-90" : "rotate-90")} />
+      </button>
+
+      {open && box
+        ? createPortal(
+            <div
+              ref={menu}
+              role="listbox"
+              className="appear fixed z-50 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-xl shadow-black/40"
+              style={{ left: box.left, top: box.top, minWidth: box.width }}
+            >
+              {options.map((option) => {
+                const on = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={on}
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    className={
+                      "flex w-full items-center gap-2 px-3 py-1.5 text-left text-body transition-colors " +
+                      (on ? "bg-raised font-medium text-body" : "text-muted hover:bg-raised/60 hover:text-body")
+                    }
+                  >
+                    <Icon
+                      name="check"
+                      className={"size-3.5 shrink-0 " + (on ? "text-kick-text" : "opacity-0")}
+                    />
+                    <span className="truncate">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 

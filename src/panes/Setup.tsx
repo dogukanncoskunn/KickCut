@@ -17,7 +17,7 @@ import {
   Input,
   Note,
   Section,
-  Select,
+  Dropdown,
   Skeleton,
   Spinner,
   Toggle,
@@ -208,23 +208,26 @@ export function Setup() {
         {renditions ? (
           <Card className="max-w-md p-4">
             <Field label={t("setup.quality")}>
-              <Select value={qualityName} onChange={(e) => setQualityName(e.target.value)}>
-                {renditions.map((r, i) => (
-                  <option key={r.name} value={r.name}>
-                    {t("setup.quality.option", {
+              <Dropdown
+                value={qualityName}
+                onChange={setQualityName}
+                ariaLabel={t("setup.quality")}
+                options={renditions.map((r, i) => ({
+                  value: r.name,
+                  label:
+                    t("setup.quality.option", {
                       name: r.name,
                       bitrate: (r.bandwidth / 1e6).toFixed(1),
-                    })}
-                    {/*
+                    }) +
+                    /*
                       Kick publishes no separate source rendition, so the top
                       rung is always the best available. It is only called the
                       source when its encoding shows it was passed through
                       rather than transcoded; otherwise it is just the highest.
-                    */}
-                    {i === 0 ? ` (${t(r.isSource ? "quality.source" : "quality.highest")})` : ""}
-                  </option>
-                ))}
-              </Select>
+                    */
+                    (i === 0 ? ` (${t(r.isSource ? "quality.source" : "quality.highest")})` : ""),
+                }))}
+              />
             </Field>
           </Card>
         ) : null}
