@@ -33,10 +33,12 @@ jobs:
 
       - run: npm ci
 
-      # tauri.conf.json runs `npm run build` first, which typechecks - so a
-      # release can never be cut from code that does not compile.
+      # Goes through scripts/build-release.mjs, which keeps the build machine's
+      # paths out of the binary - see that file for why. It also typechecks
+      # first, because tauri.conf.json runs `npm run build` before bundling, so
+      # a release can never be cut from code that does not compile.
       - name: Build the installer
-        run: npm run tauri build
+        run: npm run tauri:build
 
       - name: Find the installer
         id: installer

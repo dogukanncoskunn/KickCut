@@ -58,6 +58,25 @@ minutes, so it is offered rather than imposed.
 or after the time you asked for — within about two seconds. Use the
 editing-safe mode when you need the exact frame.
 
+## What it stores and what it sends
+
+Nothing leaves your machine except the requests needed to do the job. There is
+no analytics, no telemetry and no crash reporting — the app talks to exactly
+four hosts:
+
+| Host | Why |
+|---|---|
+| `kick.com` | broadcast list and VOD metadata |
+| `stream.kick.com` | the playlists and the video segments |
+| `gyan.dev` | the one-time FFmpeg download |
+| `github.com` | mirror for that download |
+
+On disk it keeps its FFmpeg copy, a small JSON record per queued job, and the
+segments of downloads still in progress — all under its own folder in
+`%APPDATA%`, plus a WebView2 profile in `%LOCALAPPDATA%`. Uninstalling offers
+to remove all of it; videos you have already saved are never touched, because
+they live in the folder you chose.
+
 ## Building it
 
 ```bash
@@ -65,6 +84,11 @@ npm install
 npm run tauri:dev     # run it
 npm run tauri:build   # produce the installer
 ```
+
+`tauri:build` goes through `scripts/build-release.mjs` rather than calling
+Tauri directly. Rust bakes absolute source paths into a release build, so
+without remapping them the shipped .exe tells everyone who downloads it what
+the build machine's user account is called.
 
 Checks, all of which CI runs on every push:
 

@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "node scripts/build-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
