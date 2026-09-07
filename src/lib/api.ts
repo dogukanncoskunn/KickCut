@@ -75,7 +75,54 @@ export type FfmpegProgress = {
   total: number;
 };
 
+export type JobState = "queued" | "downloading" | "paused" | "downloaded" | "failed";
+
+/** A queued job flattened together with what is actually on disk. */
+export type JobProgress = {
+  id: string;
+  title: string;
+  channel: string;
+  quality: string;
+  playlistUrl: string;
+  startIndex: number;
+  endIndex: number;
+  trimOffset: number;
+  outputSeconds: number;
+  crossesDiscontinuity: boolean;
+  outputDir: string;
+  fileName: string;
+  state: JobState;
+  createdAt: number;
+  error: string | null;
+  segmentsDone: number;
+  segmentsTotal: number;
+  bytesDone: number;
+  /** Measured from this session's start, so a resumed job reports honestly. */
+  bytesPerSecond: number;
+  etaSeconds: number | null;
+};
+
+/** What the Setup screen hands over to start a download. */
+export type NewJob = {
+  title: string;
+  channel: string;
+  quality: string;
+  playlistUrl: string;
+  startIndex: number;
+  endIndex: number;
+  trimOffset: number;
+  outputSeconds: number;
+  crossesDiscontinuity: boolean;
+  outputDir: string;
+  fileName: string;
+};
+
 export const api = {
+  loadJobs: () => invoke<void>("load_jobs"),
+  enqueueJob: (job: NewJob) => invoke<string>("enqueue_job", { job }),
+  pauseJob: (id: string) => invoke<void>("pause_job", { id }),
+  resumeJob: (id: string) => invoke<void>("resume_job", { id }),
+  cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
   ffmpegStatus: () => invoke<FfmpegStatus>("ffmpeg_status"),
   installFfmpeg: () => invoke<FfmpegStatus>("install_ffmpeg"),
   renditions: (masterUrl: string) => invoke<Rendition[]>("renditions", { masterUrl }),

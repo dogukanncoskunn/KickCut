@@ -5,6 +5,7 @@ import { LocaleProvider } from "./i18n";
 import { MotionProvider } from "./lib/Motion";
 import { ScaleProvider } from "./lib/Scale";
 import { FfmpegProvider } from "./lib/Ffmpeg";
+import { QueueProvider } from "./lib/Queue";
 import { SelectionProvider } from "./lib/Selection";
 import "./styles.css";
 
@@ -14,9 +15,11 @@ createRoot(document.getElementById("root")!).render(
       <MotionProvider>
         <ScaleProvider>
           <FfmpegProvider>
-            <SelectionProvider>
-              <App />
-            </SelectionProvider>
+            <QueueProvider>
+              <SelectionProvider>
+                <App />
+              </SelectionProvider>
+            </QueueProvider>
           </FfmpegProvider>
         </ScaleProvider>
       </MotionProvider>
