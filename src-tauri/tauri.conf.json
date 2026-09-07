@@ -35,6 +35,21 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "unsatisfied0",
+    "copyright": "unsatisfied0",
+    "shortDescription": "Download and trim Kick VODs",
+    "longDescription": "Browse a Kick channel's past broadcasts, pick a quality and a time range, and download it as an MP4 that opens cleanly in an editor.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "Turkish",
+          "German"
+        ],
+        "displayLanguageSelector": true
+      }
+    }
   }
 }

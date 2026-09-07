@@ -1,0 +1,53 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run pointless.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    # Windows because that is what this app targets: the icon pipeline, the
+    # CREATE_NO_WINDOW process flags and the file-name rules are all
+    # Windows-specific, and testing them anywhere else proves nothing.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Rust ships with the runner image, so there is no toolchain step to go
+      # stale. Only the build outputs are worth caching.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - run: npm ci
+
+      - name: Typecheck and build the frontend
+        run: npm run build
+
+      - name: Rust tests
+        working-directory: src-tauri
+        # The network tests are excluded: they hit kick.com and gyan.dev, and a
+        # CI run must not fail because someone else's server had a bad minute.
+        run: cargo test --lib
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --lib -- -D warnings
