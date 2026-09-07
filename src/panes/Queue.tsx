@@ -10,7 +10,8 @@ const TONE: Record<JobState, "ok" | "warn" | "error" | "neutral"> = {
   queued: "neutral",
   downloading: "ok",
   paused: "neutral",
-  downloaded: "ok",
+  muxing: "ok",
+  done: "ok",
   failed: "error",
 };
 
@@ -45,10 +46,15 @@ function JobCard({
 }) {
   const t = useT();
   const running = job.state === "downloading";
-  const fraction = job.segmentsTotal > 0 ? job.segmentsDone / job.segmentsTotal : 0;
+  const muxing = job.state === "muxing";
+  const fraction = muxing
+    ? job.muxFraction
+    : job.segmentsTotal > 0
+      ? job.segmentsDone / job.segmentsTotal
+      : 0;
 
   return (
-    <Card kind={running ? "primary" : "normal"} className="appear flex flex-col gap-3.5 p-5">
+    <Card kind={running || muxing ? "primary" : "normal"} className="appear flex flex-col gap-3.5 p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="truncate text-body font-medium text-body" title={job.title}>
@@ -59,18 +65,20 @@ function JobCard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {running ? <span className="dot-running size-2 rounded-full bg-kick" /> : null}
+          {running || muxing ? <span className="dot-running size-2 rounded-full bg-kick" /> : null}
           <Badge kind={TONE[job.state]}>{t(`queue.state.${job.state}`)}</Badge>
         </div>
       </div>
 
-      {job.state !== "failed" ? (
+      {job.state !== "failed" && job.state !== "done" ? (
         <div className="flex flex-col gap-2">
           <ProgressBar value={fraction} kind={job.state === "paused" ? "warn" : "ok"} />
           <div className="flex flex-wrap justify-between gap-x-6 gap-y-1 font-mono text-small text-muted">
             <span>
-              {t("queue.progress", { done: job.segmentsDone, total: job.segmentsTotal })}
-              {job.bytesDone > 0 ? ` · ${bytes(job.bytesDone)}` : ""}
+              {muxing
+                ? t("queue.muxing")
+                : t("queue.progress", { done: job.segmentsDone, total: job.segmentsTotal })}
+              {!muxing && job.bytesDone > 0 ? ` · ${bytes(job.bytesDone)}` : ""}
             </span>
             {running ? (
               <span>
@@ -102,6 +110,16 @@ function JobCard({
         {job.state === "queued" ? (
           <Button size="small" icon="pause" onClick={() => onPause(job.id)}>
             {t("queue.pause")}
+          </Button>
+        ) : null}
+        {job.outputPath ? (
+          <Button
+            kind="primary"
+            size="small"
+            icon="check"
+            onClick={() => void openPath(job.outputPath!)}
+          >
+            {t("queue.openFile")}
           </Button>
         ) : null}
         <Button size="small" icon="folder" onClick={() => void openPath(job.outputDir)}>

@@ -75,7 +75,10 @@ export type FfmpegProgress = {
   total: number;
 };
 
-export type JobState = "queued" | "downloading" | "paused" | "downloaded" | "failed";
+export type JobState = "queued" | "downloading" | "paused" | "muxing" | "done" | "failed";
+
+/** How the segments become an MP4. See src-tauri/src/mux.rs for the reasoning. */
+export type MuxMode = "copy" | "reencode";
 
 /** A queued job flattened together with what is actually on disk. */
 export type JobProgress = {
@@ -91,6 +94,9 @@ export type JobProgress = {
   crossesDiscontinuity: boolean;
   outputDir: string;
   fileName: string;
+  muxMode: MuxMode;
+  frameRate: number;
+  outputPath: string | null;
   state: JobState;
   createdAt: number;
   error: string | null;
@@ -100,6 +106,8 @@ export type JobProgress = {
   /** Measured from this session's start, so a resumed job reports honestly. */
   bytesPerSecond: number;
   etaSeconds: number | null;
+  /** 0..1 while ffmpeg is assembling, otherwise null. */
+  muxFraction: number | null;
 };
 
 /** What the Setup screen hands over to start a download. */
@@ -115,6 +123,8 @@ export type NewJob = {
   crossesDiscontinuity: boolean;
   outputDir: string;
   fileName: string;
+  muxMode: MuxMode;
+  frameRate: number;
 };
 
 export const api = {

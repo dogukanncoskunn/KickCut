@@ -2,14 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useLocale, useT } from "../i18n";
 import { api } from "../lib/api";
-import type { PlaylistSummary, RangePlan, Rendition } from "../lib/api";
+import type { MuxMode, PlaylistSummary, RangePlan, Rendition } from "../lib/api";
 import { cleanError } from "../lib/errors";
 import { bytes, parseKickDate, shortDate, timecode } from "../lib/format";
 import { useFfmpeg } from "../lib/Ffmpeg";
 import { useSelection } from "../lib/Selection";
 import {
+  Badge,
   Button,
   Card,
+  Columns,
   EmptyState,
   Field,
   Input,
@@ -43,6 +45,7 @@ export function Setup() {
   const [error, setError] = useState<string | null>(null);
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(FOLDER_KEY) ?? "");
   const [fileName, setFileName] = useState("");
+  const [muxMode, setMuxMode] = useState<MuxMode>("copy");
   const [queued, setQueued] = useState(false);
   const ffmpeg = useFfmpeg();
 
@@ -119,6 +122,10 @@ export function Setup() {
     return () => window.clearTimeout(planTimer.current);
   }, [playlistUrl, range, quality]);
 
+  useEffect(() => {
+    if (plan) setMuxMode(plan.crossesDiscontinuity ? "reencode" : "copy");
+  }, [plan?.crossesDiscontinuity]);
+
   /*
    * A default name that is useful in a folder full of these: who streamed it
    * and when. The stream title is not used - they are long, emoji-heavy and
@@ -156,6 +163,8 @@ export function Setup() {
         crossesDiscontinuity: plan.crossesDiscontinuity,
         outputDir,
         fileName,
+        muxMode,
+        frameRate: quality.frameRate,
       });
       setQueued(true);
       setError(null);
@@ -287,6 +296,24 @@ export function Setup() {
       ) : null}
 
       {plan ? (
+        <Section title={t("setup.mux")}>
+          <Columns min="24rem">
+            {(["copy", "reencode"] as const).map((mode) => (
+              <ModeCard
+                key={mode}
+                active={muxMode === mode}
+                suggested={plan.crossesDiscontinuity === (mode === "reencode")}
+                title={t(`setup.mux.${mode}`)}
+                hint={t(`setup.mux.${mode}.hint`)}
+                suggestedLabel={t("setup.mux.suggested")}
+                onPick={() => setMuxMode(mode)}
+              />
+            ))}
+          </Columns>
+        </Section>
+      ) : null}
+
+      {plan ? (
         <Section title={t("setup.output")}>
           <div className="flex flex-col gap-4">
             <Card className="flex flex-wrap items-end gap-4 p-5">
@@ -352,5 +379,57 @@ function Figure({ label, value, quiet }: { label: string; value: string; quiet?:
         {value}
       </span>
     </div>
+  );
+}
+
+/*
+ * A choice between two real costs - time against exactness - so both are
+ * stated rather than hidden behind a label. The suggestion follows the plan:
+ * a range that spans a break in the broadcast is the case where a stream copy
+ * is most likely to disappoint.
+ */
+function ModeCard({
+  active,
+  suggested,
+  title,
+  hint,
+  suggestedLabel,
+  onPick,
+}: {
+  active: boolean;
+  suggested: boolean;
+  title: string;
+  hint: string;
+  suggestedLabel: string;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      aria-pressed={active}
+      className={
+        "flex h-full flex-col gap-2 rounded-lg border p-4 text-left transition-colors " +
+        (active
+          ? "border-kick/60 bg-raised/70"
+          : "border-line bg-surface/60 hover:border-muted/30")
+      }
+    >
+      <span className="flex items-center gap-2">
+        <span
+          className={
+            "size-3.5 shrink-0 rounded-full border-2 " +
+            (active ? "border-kick bg-kick" : "border-muted")
+          }
+        />
+        <span className="text-body font-medium text-body">{title}</span>
+      </span>
+      <span className="text-small text-muted">{hint}</span>
+      {suggested ? (
+        <span className="mt-auto pt-1">
+          <Badge kind="ok">{suggestedLabel}</Badge>
+        </span>
+      ) : null}
+    </button>
   );
 }

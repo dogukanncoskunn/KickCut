@@ -25,6 +25,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::hls::parse_media;
 use crate::kick::{client, get_text};
+use crate::mux::{self, MuxMode};
 
 /// Concurrent segment requests. Eight saturates a fast connection without
 /// making the app the reason the rest of the machine feels slow.
@@ -37,8 +38,10 @@ pub enum JobState {
     Queued,
     Downloading,
     Paused,
-    /// Segments are all on disk; phase 5 turns them into an MP4.
-    Downloaded,
+    /// Every segment is on disk; ffmpeg is assembling the MP4.
+    Muxing,
+    /// The MP4 exists and has been read back to confirm it is real.
+    Done,
     Failed,
 }
 
@@ -62,6 +65,14 @@ pub struct Job {
     pub crosses_discontinuity: bool,
     pub output_dir: String,
     pub file_name: String,
+    #[serde(default)]
+    pub mux_mode: MuxMode,
+    /// Needed only when re-encoding, to pin a constant frame rate.
+    #[serde(default)]
+    pub frame_rate: f64,
+    /// Set once the file exists, so the queue can offer to open it.
+    #[serde(default)]
+    pub output_path: Option<String>,
     pub state: JobState,
     pub created_at: u64,
     pub error: Option<String>,
@@ -85,6 +96,8 @@ pub struct JobProgress {
     /// Only meaningful while running; zero otherwise.
     pub bytes_per_second: u64,
     pub eta_seconds: Option<u64>,
+    /// 0..1 while ffmpeg is running, otherwise None.
+    pub mux_fraction: Option<f64>,
 }
 
 /// Per-job stop switches, held only while a job is active.
@@ -98,6 +111,8 @@ struct Control {
 pub struct Downloads {
     jobs: Mutex<Vec<Job>>,
     control: Mutex<Option<(String, Arc<Control>)>>,
+    /// Job id and 0..1 progress of the running mux.
+    muxing: Mutex<Option<(String, Arc<mux::MuxProgress>)>>,
     /// Live counters for the running job, so progress does not restat the
     /// directory several times a second.
     live: Mutex<Option<Live>>,
@@ -116,6 +131,7 @@ impl Default for Downloads {
         Self {
             jobs: Mutex::new(Vec::new()),
             control: Mutex::new(None),
+            muxing: Mutex::new(None),
             live: Mutex::new(None),
         }
     }
@@ -257,6 +273,11 @@ fn emit_queue(app: &AppHandle) {
         return;
     };
     let jobs = state.snapshot();
+    let muxing = state
+        .muxing
+        .lock()
+        .ok()
+        .and_then(|m| m.as_ref().map(|(id, slot)| (id.clone(), mux::load_fraction(slot))));
     let live = state.live.lock().ok().and_then(|l| {
         l.as_ref().map(|l| {
             (
@@ -273,6 +294,10 @@ fn emit_queue(app: &AppHandle) {
         .into_iter()
         .map(|job| {
             let total = job.segment_count();
+            let mux_fraction = muxing
+                .as_ref()
+                .filter(|(id, _)| *id == job.id)
+                .map(|(_, fraction)| *fraction);
             match &live {
                 Some((id, done, bytes, elapsed, at_start)) if *id == job.id => {
                     let done = *done as usize;
@@ -294,15 +319,23 @@ fn emit_queue(app: &AppHandle) {
                         bytes_done: *bytes,
                         bytes_per_second: rate,
                         eta_seconds: eta,
+                        mux_fraction,
                         job,
                     }
                 }
+                // A job that is muxing, queued or finished reports no download
+                // counters: they would be a stale snapshot of a past session.
                 _ => JobProgress {
-                    segments_done: 0,
+                    segments_done: if matches!(job.state, JobState::Muxing | JobState::Done) {
+                        total
+                    } else {
+                        0
+                    },
                     segments_total: total,
                     bytes_done: 0,
                     bytes_per_second: 0,
                     eta_seconds: None,
+                    mux_fraction,
                     job,
                 },
             }
@@ -342,23 +375,52 @@ fn pump(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let app = runner;
         let id = job.id.clone();
-        let outcome = run_job(&app, &job, &control).await;
+        let downloaded = run_job(&app, &job, &control).await;
 
         let state = app.state::<Downloads>();
-        if let Ok(mut slot) = state.control.lock() {
-            *slot = None;
-        }
         if let Ok(mut live) = state.live.lock() {
             *live = None;
         }
 
-        let next_state = match &outcome {
-            Ok(true) => JobState::Downloaded,
+        /*
+         * Downloading and muxing are one job, not two. The control slot stays
+         * held across both so nothing else starts while ffmpeg is running, and
+         * a job only reports Done once the file has been read back.
+         */
+        let outcome: Result<JobState, String> = match downloaded {
+            Ok(true) => {
+                if let Some(updated) = state.set_state(&id, JobState::Muxing, None) {
+                    let _ = save(&app, &updated).await;
+                }
+                emit_queue(&app);
+                match assemble(&app, &job, &control).await {
+                    Ok(path) => {
+                        if let Ok(mut jobs) = state.jobs.lock() {
+                            if let Some(entry) = jobs.iter_mut().find(|j| j.id == id) {
+                                entry.output_path = Some(path);
+                            }
+                        }
+                        Ok(JobState::Done)
+                    }
+                    Err(problem) => Err(problem),
+                }
+            }
             // Stopped on request: the segments stay on disk, ready to resume.
-            Ok(false) => JobState::Paused,
-            Err(_) => JobState::Failed,
+            Ok(false) => Ok(JobState::Paused),
+            Err(problem) => Err(problem),
         };
-        let error = outcome.as_ref().err().cloned();
+
+        if let Ok(mut slot) = state.control.lock() {
+            *slot = None;
+        }
+        if let Ok(mut slot) = state.muxing.lock() {
+            *slot = None;
+        }
+
+        let (next_state, error) = match outcome {
+            Ok(state) => (state, None),
+            Err(problem) => (JobState::Failed, Some(problem)),
+        };
         if let Some(updated) = state.set_state(&id, next_state, error) {
             let _ = save(&app, &updated).await;
         }
@@ -368,6 +430,62 @@ fn pump(app: &AppHandle) {
     });
 
     emit_queue(app);
+}
+
+/// Turn the downloaded segments into the finished MP4.
+///
+/// Returns the path it wrote. The segments are deleted only after the file has
+/// been read back and confirmed - if anything here fails, an hour of download
+/// is still on disk and the job can be retried without fetching it again.
+async fn assemble(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<String, String> {
+    let tools = crate::ffmpeg::locate(app)
+        .await?
+        .1
+        .ok_or("ffmpeg is not installed, so this clip cannot be assembled.")?;
+
+    let dir = parts_dir(app, &job.id)?;
+    let list = mux::write_concat_list(&dir, job.start_index, job.end_index).await?;
+    let output = mux::free_output_path(Path::new(&job.output_dir), &job.file_name);
+
+    let fraction = Arc::new(mux::MuxProgress::new(0));
+    if let Ok(mut slot) = app.state::<Downloads>().muxing.lock() {
+        *slot = Some((job.id.clone(), fraction.clone()));
+    }
+
+    // ffmpeg reports far more often than a progress bar needs; the UI is
+    // refreshed on a timer instead, as during the download.
+    let ticker = {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                emit_queue(&app);
+            }
+        })
+    };
+
+    let reporter = fraction.clone();
+    let result = mux::run(
+        &tools,
+        &list,
+        &output,
+        job.mux_mode,
+        job.trim_offset,
+        job.output_seconds,
+        job.frame_rate,
+        &control.cancel,
+        &move |done| mux::store_fraction(&reporter, done),
+    )
+    .await;
+    ticker.abort();
+    result?;
+
+    mux::verify(&tools, &output, job.output_seconds).await?;
+
+    // The segments have served their purpose; they are typically far larger
+    // than the file they produced.
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+    Ok(output.display().to_string())
 }
 
 /// Fetch every missing segment. `Ok(true)` means finished, `Ok(false)` means
@@ -612,6 +730,8 @@ pub struct NewJob {
     pub crosses_discontinuity: bool,
     pub output_dir: String,
     pub file_name: String,
+    pub mux_mode: MuxMode,
+    pub frame_rate: f64,
 }
 
 #[tauri::command]
@@ -645,6 +765,9 @@ pub async fn enqueue_job(app: AppHandle, job: NewJob) -> Result<String, String> 
         crosses_discontinuity: job.crosses_discontinuity,
         output_dir: job.output_dir,
         file_name: safe_file_name(&job.file_name),
+        mux_mode: job.mux_mode,
+        frame_rate: job.frame_rate,
+        output_path: None,
         state: JobState::Queued,
         created_at,
         error: None,
@@ -750,6 +873,9 @@ mod tests {
             crosses_discontinuity: true,
             output_dir: ".".into(),
             file_name: "clip".into(),
+            mux_mode: MuxMode::Copy,
+            frame_rate: 60.0,
+            output_path: None,
             state: JobState::Queued,
             created_at: 0,
             error: None,

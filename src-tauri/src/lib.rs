@@ -2,6 +2,7 @@ mod download;
 mod ffmpeg;
 mod hls;
 mod kick;
+mod mux;
 
 /// Entry point, kept in the library rather than in `main.rs` so integration
 /// tests and future platform shims can call it.
