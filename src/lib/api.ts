@@ -56,7 +56,28 @@ export type RangePlan = {
   crossesDiscontinuity: boolean;
 };
 
+/** Where ffmpeg was found. `managed` means this app installed it. */
+export type FfmpegSource = "managed" | "system" | "missing";
+
+export type FfmpegStatus = {
+  source: FfmpegSource;
+  /** First line of `ffmpeg -version`, or null when nothing was found. */
+  version: string | null;
+  path: string | null;
+  downloadBytes: number;
+  downloadVersion: string;
+};
+
+/** Payload of the `ffmpeg-install` event. */
+export type FfmpegProgress = {
+  stage: "downloading" | "verifying" | "extracting" | "done";
+  received: number;
+  total: number;
+};
+
 export const api = {
+  ffmpegStatus: () => invoke<FfmpegStatus>("ffmpeg_status"),
+  installFfmpeg: () => invoke<FfmpegStatus>("install_ffmpeg"),
   renditions: (masterUrl: string) => invoke<Rendition[]>("renditions", { masterUrl }),
   playlistSummary: (playlistUrl: string) => invoke<PlaylistSummary>("playlist_summary", { playlistUrl }),
   planRange: (playlistUrl: string, startSeconds: number, endSeconds: number, bandwidth: number) =>

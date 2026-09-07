@@ -1,3 +1,4 @@
+mod ffmpeg;
 mod hls;
 mod kick;
 
@@ -10,6 +11,8 @@ pub fn run() {
             kick::renditions,
             hls::playlist_summary,
             hls::plan_range,
+            ffmpeg::ffmpeg_status,
+            ffmpeg::install_ffmpeg,
         ])
         .run(tauri::generate_context!())
         .expect("KickCut could not start");
