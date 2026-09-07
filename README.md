@@ -98,10 +98,21 @@ npm run build
 cd src-tauri && cargo test --lib && cargo clippy --lib -- -D warnings
 ```
 
-Two tests are marked `#[ignore]` because they use the network — one downloads
-FFmpeg end to end, the other checks Kick's endpoints still have the shape this
-app expects. Run them deliberately with `cargo test -- --ignored` after
-changing anything they cover.
+Three tests are marked `#[ignore]` because they need the network, a real
+FFmpeg, or both. They are the ones that prove the app actually works rather
+than that its arguments look right, so run them after touching anything they
+cover:
+
+```bash
+# Downloads the pinned FFmpeg, verifies its checksum and unpacks it.
+cargo test -- --ignored installs_the_pinned_build
+
+# An FFmpeg already on the machine is used as-is, and a managed copy wins.
+KICKCUT_TEST_FFMPEG_DIR=<folder with ffmpeg+ffprobe>   cargo test -- --ignored an_ffmpeg_already_on_path
+
+# Real segments off Kick's CDN, joined by the real FFmpeg and read back.
+KICKCUT_TEST_FFMPEG_DIR=<folder> KICKCUT_TEST_PLAYLIST=<media playlist url>   cargo test -- --ignored assembles_real_segments
+```
 
 ## A note on what you download
 

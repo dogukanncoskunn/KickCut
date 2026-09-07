@@ -36,9 +36,9 @@ const SHA256: &str = "fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e6
 const EXPECTED_BYTES: u64 = 111_253_802;
 
 #[cfg(windows)]
-const EXE: &str = ".exe";
+pub const EXE: &str = ".exe";
 #[cfg(not(windows))]
-const EXE: &str = "";
+pub const EXE: &str = "";
 
 /// Where ffmpeg was found, so the UI can say something truthful about it.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]

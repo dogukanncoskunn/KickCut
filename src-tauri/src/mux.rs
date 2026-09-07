@@ -449,6 +449,107 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The whole point of the app, end to end, with nothing faked.
+    ///
+    /// Real segments off Kick's CDN, the real ffmpeg, the real flags, and the
+    /// result read back with ffprobe. Everything else in this file checks the
+    /// arguments we *intend* to pass; this is the only thing that proves they
+    /// produce a file - that the concat script resolves, that
+    /// `aac_adtstoasc` accepts Kick's audio, and that the trim lands where it
+    /// should.
+    ///
+    /// `#[ignore]`d: it needs the network and a real ffmpeg. Run with
+    ///   KICKCUT_TEST_PLAYLIST=<a media playlist url>
+    ///   KICKCUT_TEST_FFMPEG_DIR=<folder with ffmpeg and ffprobe>
+    ///   cargo test -- --ignored assembles_real_segments
+    #[tokio::test]
+    #[ignore = "needs network and a real ffmpeg"]
+    async fn assembles_real_segments_into_a_playable_mp4() {
+        let Ok(playlist_url) = std::env::var("KICKCUT_TEST_PLAYLIST") else {
+            eprintln!("set KICKCUT_TEST_PLAYLIST to a media playlist url");
+            return;
+        };
+        let ffmpeg_dir = PathBuf::from(
+            std::env::var("KICKCUT_TEST_FFMPEG_DIR").expect("set KICKCUT_TEST_FFMPEG_DIR"),
+        );
+        let tools = Tools {
+            ffmpeg: ffmpeg_dir.join(format!("ffmpeg{}", crate::ffmpeg::EXE)),
+            ffprobe: ffmpeg_dir.join(format!("ffprobe{}", crate::ffmpeg::EXE)),
+        };
+
+        let body = crate::kick::get_text(&playlist_url).await.expect("playlist");
+        let playlist = crate::hls::parse_media(&body, &playlist_url).expect("parse");
+        assert!(playlist.segments.len() >= 3, "need a few segments to join");
+
+        let dir = std::env::temp_dir().join("kickcut-e2e-mux");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Three segments is enough to exercise joining; downloading hours of
+        // video would test nothing extra.
+        let http = crate::kick::client().expect("client");
+        let take = 3usize;
+        for index in 0..take {
+            let bytes = http
+                .get(&playlist.segments[index].url)
+                .send()
+                .await
+                .expect("segment request")
+                .bytes()
+                .await
+                .expect("segment body");
+            assert!(bytes.len() > 10_000, "segment {index} looks empty");
+            std::fs::write(dir.join(format!("{index}.ts")), &bytes).unwrap();
+        }
+
+        let covered: f64 = playlist.segments[..take].iter().map(|s| s.duration).sum();
+        // Trim a little off each end, so the seek and duration flags are
+        // actually exercised rather than defaulted past.
+        let trim = 1.5;
+        let wanted = covered - trim - 1.0;
+
+        let list = write_concat_list(&dir, 0, take - 1).await.expect("concat list");
+        let output = dir.join("clip.mp4");
+        let cancel = AtomicBool::new(false);
+        let seen = std::sync::Arc::new(AtomicU64::new(0));
+        let reporter = seen.clone();
+
+        run(
+            &tools,
+            &MuxRequest {
+                concat_list: list,
+                output: output.clone(),
+                mode: MuxMode::Copy,
+                trim_offset: trim,
+                output_seconds: wanted,
+                frame_rate: 60.0,
+            },
+            &cancel,
+            &move |fraction| store_fraction(&reporter, fraction),
+        )
+        .await
+        .expect("ffmpeg should produce a file");
+
+        assert!(output.is_file(), "no output written");
+        assert!(load_fraction(&seen) > 0.0, "no progress was ever reported");
+
+        // The check the app itself runs before calling a job done.
+        let verified = verify(&tools, &output, wanted).await.expect("verify");
+        assert!(verified.has_video && verified.has_audio);
+        assert!(
+            (verified.seconds - wanted).abs() < 3.0,
+            "expected about {wanted:.1}s, got {:.1}s",
+            verified.seconds
+        );
+
+        eprintln!(
+            "joined {take} segments -> {:.1}s mp4, {} bytes",
+            verified.seconds,
+            std::fs::metadata(&output).unwrap().len()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn fractions_survive_the_atomic() {
         let slot = MuxProgress::new(0);
