@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Baseline window permissions. Everything privileged is a custom Rust command.","local":true,"windows":["main"],"permissions":["core:default"]}}
