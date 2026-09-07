@@ -1,7 +1,7 @@
 /*
  * English is the source of truth for the message shape: `tr.ts` and `de.ts`
  * are typed against it, so a key added here fails the build until all three
- * carry it. Placeholders are `{name}` and substituted positionally by `t()`.
+ * carry it. Placeholders are `{name}` and substituted by `t()`.
  */
 export const en = {
   "app.name": "KickCut",
@@ -20,6 +20,24 @@ export const en = {
   "common.refresh": "Refresh",
   "common.cancel": "Cancel",
   "common.loading": "Loading…",
+
+  "library.channel.label": "Channel",
+  "library.channel.placeholder": "e.g. xqc",
+  "library.channel.hint": "Kick only serves the most recent broadcasts. For an older one, paste its link.",
+  "library.channel.submit": "List broadcasts",
+  "library.link.label": "Or paste a VOD link",
+  "library.link.placeholder": "kick.com/channel/videos/…",
+  "library.link.submit": "Open",
+  "library.results": "{count} broadcasts from {channel}",
+  "library.select": "Select",
+  "library.selected": "Selected",
+  "library.views": "{count} views",
+
+  "setup.vod": "Broadcast",
+  "setup.quality": "Quality",
+  "setup.quality.loading": "Reading available qualities…",
+  "setup.quality.option": "{name} · {bitrate} Mbps",
+  "setup.length": "Full length",
 
   "settings.language": "Language",
   "settings.language.hint": "Applies immediately, remembered on this machine.",
