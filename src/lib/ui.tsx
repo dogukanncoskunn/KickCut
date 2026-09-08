@@ -403,7 +403,7 @@ export function Badge({ kind = "neutral", children }: { kind?: NoteKind | "neutr
 
 export function EmptyState({ icon, children }: { icon: IconName; children: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-line px-6 py-14 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-line px-6 py-10 text-center">
       <Icon name={icon} className="size-7 text-muted/50" />
       <p className="max-w-[28rem] text-body text-muted">{children}</p>
     </div>

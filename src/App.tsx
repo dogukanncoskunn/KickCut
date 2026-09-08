@@ -125,7 +125,7 @@ export function App() {
         {TABS.map((pane) => (
           <div
             key={pane.id}
-            className="mx-auto flex flex-col gap-5 px-6 pt-5 pb-12"
+            className="mx-auto flex flex-col gap-4 px-6 pt-4 pb-6"
             style={pane.id === tab ? { maxWidth: pane.width } : { display: "none" }}
           >
             <h1 className="font-display text-page font-semibold tracking-tight text-body">

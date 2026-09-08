@@ -186,7 +186,7 @@ export function Setup() {
   // reachable whether or not the next one has been set up.
   if (!vod) {
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         <EmptyState icon="scissors">{t("empty.setup")}</EmptyState>
         <RunningDownloads />
         <SpeedLimitBox />
@@ -197,15 +197,15 @@ export function Setup() {
   const whole = summary !== null && range !== null && range.start === 0 && range.end === summary.totalSeconds;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       {/*
         The broadcast is context, not a decision, so it gets one slim strip
         rather than a section of its own - the height it used to take was height
         the choices below had to scroll for.
       */}
-      <Card className="flex items-center gap-4 p-4">
+      <Card className="flex items-center gap-4 p-3">
         {vod.thumbnail ? (
-          <img src={vod.thumbnail} alt="" className="h-[4.5rem] w-32 shrink-0 rounded object-cover" />
+          <img src={vod.thumbnail} alt="" className="h-14 w-24 shrink-0 rounded object-cover" />
         ) : null}
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="truncate text-mid font-semibold text-body" title={vod.title}>
@@ -236,8 +236,8 @@ export function Setup() {
         the rail stopped short and the button sat opposite the middle of the
         left column instead of level with the box that ends it.
       */}
-      <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(22rem,1fr)]">
-        <div className="flex min-w-0 flex-col gap-5">
+      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(22rem,1fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
       <Section title={t("setup.quality")}>
         {!renditions && !error ? (
           <Card className="flex items-center gap-3 p-4">
@@ -300,12 +300,12 @@ export function Setup() {
           }
         >
           {!summary ? (
-            <Card className="flex flex-col gap-4 p-5">
+            <Card className="flex flex-col gap-3 p-4">
               <Skeleton className="h-2 w-full" />
               <Skeleton className="h-9 w-36" />
             </Card>
           ) : (
-            <Card className="flex flex-col gap-5 p-5">
+            <Card className="flex flex-col gap-4 p-4">
               {range ? (
                 <RangePicker
                   total={summary.totalSeconds}
@@ -325,7 +325,7 @@ export function Setup() {
         </div>
 
         {/* What the choices on the left add up to, and the button that acts. */}
-        <div className="flex min-w-0 flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-4">
           {plan ? (
             <Section title={t("setup.plan")}>
               <div className="flex flex-col gap-3">
@@ -494,9 +494,19 @@ function RunningDownloads() {
  */
 function SpeedLimitBox() {
   const t = useT();
+  /*
+   * Anchored to the foot of its column, exactly as the save block is on the
+   * other side. Which column is the taller one depends on the broadcast - a
+   * range that crosses a break adds a warning to the right, a queue with two
+   * jobs in it adds height to the left - so pushing only one of them down
+   * aligns the pair for some VODs and not others. Measured at 997px against
+   * 1004px on a 1915-segment VOD, where the right column was the longer one
+   * and this box stopped short of it. Both ends float down; the shorter column
+   * closes the gap, whichever it happens to be.
+   */
   return (
-    <Section title={t("speed.label")} hint={t("speed.hint")}>
-      <Card className="p-5">
+    <Section title={t("speed.label")} hint={t("speed.hint")} className="mt-auto">
+      <Card className="p-4">
         <SpeedControl />
       </Card>
     </Section>
