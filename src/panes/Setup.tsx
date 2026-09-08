@@ -365,8 +365,18 @@ export function Setup() {
             </Section>
           ) : null}
 
+          {/*
+            The save block is anchored to the foot of the rail.
+
+            The left column is the taller of the two - it carries the range, the
+            queue and the speed cap - so this one used to stop short and leave
+            the button floating in the middle of an empty half-column while the
+            left side ran on past it. Pushing this block down puts the action on
+            the same baseline as the last box opposite, and the slack collects
+            in one deliberate gap instead of a ragged edge.
+          */}
           {plan ? (
-            <Section title={t("setup.output")}>
+            <Section title={t("setup.output")} className="mt-auto">
               <div className="flex flex-col gap-3">
                 <Card className="flex flex-col gap-3 p-4">
                   <div className="flex flex-col gap-1.5">

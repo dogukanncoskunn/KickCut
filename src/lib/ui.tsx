@@ -86,15 +86,17 @@ export function Section({
   title,
   hint,
   action,
+  className = "",
   children,
 }: {
   title: string;
   hint?: string;
   action?: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3">
+    <section className={"flex flex-col gap-3 " + className}>
       <div className="flex items-baseline justify-between gap-4">
         <div>
           <h2 className="font-display text-mid font-semibold text-body">{title}</h2>
