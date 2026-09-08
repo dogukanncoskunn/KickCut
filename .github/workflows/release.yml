@@ -76,26 +76,32 @@ jobs:
           # Appended to whatever notes were generated, rather than replacing
           # them, so the changelog survives.
           $body = gh release view $tag --json body -q .body
-          $verify = @"
 
-## Verifying your download
-
-Windows will warn that the publisher is unknown - the app is not code-signed.
-Choose **More info**, then **Run anyway**.
-
-To confirm the file is the one published here and was not altered on the way,
-compare its fingerprint:
-
-``````powershell
-Get-FileHash $($env:ASSET_NAME) -Algorithm SHA256
-``````
-
-``````
-$($env:ASSET_SHA)
-``````
-"@
+          # Built line by line rather than as a here-string: PowerShell wants a
+          # here-string's closing "@ at column zero, and a YAML block scalar
+          # ends at the first line that is not indented - so the two cannot
+          # coexist, and trying it silently invalidates this whole file.
+          $fence = [char]0x60 * 3
+          $lines = @(
+            ""
+            "## Verifying your download"
+            ""
+            "Windows will warn that the publisher is unknown - the app is not"
+            "code-signed. Choose **More info**, then **Run anyway**."
+            ""
+            "To confirm the file is the one published here and was not altered"
+            "on the way, compare its fingerprint:"
+            ""
+            ($fence + "powershell")
+            ("Get-FileHash " + $env:ASSET_NAME + " -Algorithm SHA256")
+            $fence
+            ""
+            $fence
+            $env:ASSET_SHA
+            $fence
+          )
           if ($body -notmatch "Verifying your download") {
-            gh release edit $tag --notes "$body$verify"
+            gh release edit $tag --notes ($body + ($lines -join "`n"))
           }
 
       # On a manual run there is no tag to attach to, so the build is kept as
