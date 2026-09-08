@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
 import { isActive, JobCard } from "../panes/JobCard";
-import { useQueue } from "./Queue";
+import { useConfirmedCancel, useQueue } from "./Queue";
 import { Icon } from "./ui";
 
 /*
@@ -31,6 +31,7 @@ type Point = { x: number; y: number };
 export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
   const t = useT();
   const { jobs, pause, resume } = useQueue();
+  const cancel = useConfirmedCancel();
   const [collapsed, setCollapsed] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const grab = useRef<Point | null>(null);
@@ -137,7 +138,7 @@ export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
 
         {!collapsed ? (
           <div className="p-2">
-            <JobCard job={job} onPause={pause} onResume={resume} compact />
+            <JobCard job={job} onPause={pause} onResume={resume} onCancel={cancel} compact />
           </div>
         ) : null}
       </div>

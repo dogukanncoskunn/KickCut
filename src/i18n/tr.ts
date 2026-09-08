@@ -110,6 +110,8 @@ export const tr: Messages = {
   "queue.eta": "{time} kaldı",
   "queue.pause": "Duraklat",
   "queue.resume": "Devam et",
+  "queue.cancel": "İptal et",
+  "queue.cancel.confirm": "Bu indirme durdurulsun ve şu ana kadar inen her şey bilgisayarınızdan silinsin mi? Bu işlem geri alınamaz.",
   "queue.remove": "Kaldır",
   "queue.open": "Klasörü aç",
   "queue.remove.confirm": "Bu iş kaldırılsın ve şu ana kadar inen kısım silinsin mi?",

@@ -21,7 +21,7 @@ import {
   Spinner,
   Toggle,
 } from "../lib/ui";
-import { useQueue } from "../lib/Queue";
+import { useConfirmedCancel, useQueue } from "../lib/Queue";
 import { SpeedControl } from "../lib/SpeedControl";
 import { isActive, JobCard } from "./JobCard";
 import { RangePicker } from "./RangePicker";
@@ -229,7 +229,14 @@ export function Setup() {
         it keeps the wide column; the choices that are just a list of options
         read perfectly well in a narrow one beside it.
       */}
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(22rem,1fr)]">
+      {/*
+        The columns stretch to the taller of the two. They used to be top
+        aligned, which meant the right one was only as tall as its own content
+        and the save block at its foot had no free space to be pushed into - so
+        the rail stopped short and the button sat opposite the middle of the
+        left column instead of level with the box that ends it.
+      */}
+      <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(22rem,1fr)]">
         <div className="flex min-w-0 flex-col gap-5">
       <Section title={t("setup.quality")}>
         {!renditions && !error ? (
@@ -458,6 +465,7 @@ export function Setup() {
 function RunningDownloads() {
   const t = useT();
   const { jobs, pause, resume } = useQueue();
+  const cancel = useConfirmedCancel();
   const running = jobs.filter(isActive);
 
   return (
@@ -467,7 +475,7 @@ function RunningDownloads() {
       ) : (
         <div className="flex flex-col gap-3">
           {running.map((job) => (
-            <JobCard key={job.id} job={job} onPause={pause} onResume={resume} />
+            <JobCard key={job.id} job={job} onPause={pause} onResume={resume} onCancel={cancel} />
           ))}
         </div>
       )}

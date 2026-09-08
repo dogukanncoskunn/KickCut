@@ -113,6 +113,8 @@ export const en = {
   "queue.eta": "{time} left",
   "queue.pause": "Pause",
   "queue.resume": "Resume",
+  "queue.cancel": "Cancel download",
+  "queue.cancel.confirm": "Stop this download and delete everything it has fetched so far? This cannot be undone.",
   "queue.remove": "Remove",
   "queue.open": "Open folder",
   "queue.remove.confirm": "Remove this job and delete what it has downloaded?",

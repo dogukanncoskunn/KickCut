@@ -110,6 +110,8 @@ export const de: Messages = {
   "queue.eta": "noch {time}",
   "queue.pause": "Pause",
   "queue.resume": "Fortsetzen",
+  "queue.cancel": "Abbrechen",
+  "queue.cancel.confirm": "Diesen Download stoppen und alles bereits Geladene löschen? Das lässt sich nicht rückgängig machen.",
   "queue.remove": "Entfernen",
   "queue.open": "Ordner öffnen",
   "queue.remove.confirm": "Diesen Auftrag entfernen und das bereits Geladene löschen?",

@@ -29,6 +29,7 @@ export function JobCard({
   job,
   onPause,
   onResume,
+  onCancel,
   onRemove,
   onForget,
   compact = false,
@@ -36,6 +37,8 @@ export function JobCard({
   job: JobProgress;
   onPause?: (id: string) => void;
   onResume?: (id: string) => void;
+  /** Stops an unfinished job and throws away what it has downloaded. */
+  onCancel?: (id: string) => void;
   onRemove?: (id: string) => void;
   /** Drops the record and leaves the file alone. */
   onForget?: (id: string) => void;
@@ -147,6 +150,17 @@ export function JobCard({
         >
           {t("queue.reveal")}
         </Button>
+
+        {/*
+          Only while there is something to stop. A finished job has nothing to
+          cancel, and a failed one has already stopped itself - offering it
+          there would just be a second way to delete the record.
+        */}
+        {onCancel && isActive(job) ? (
+          <Button kind="danger" size="small" icon="close" onClick={() => onCancel(job.id)}>
+            {t("queue.cancel")}
+          </Button>
+        ) : null}
 
         {onRemove ? (
           <Button kind="danger" size="small" icon="close" onClick={() => onRemove(job.id)}>
