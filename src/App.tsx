@@ -36,7 +36,7 @@ type TabId = "library" | "download" | "downloads" | "settings";
 const TABS: { id: TabId; icon: IconName; label: MessageKey; title: MessageKey; width: string }[] = [
   // The wide panes are capped only so text never runs edge to edge on a very
   // wide monitor; below that they use whatever the window gives them.
-  { id: "library", icon: "library", label: "nav.library", title: "pane.library.title", width: "112rem" },
+  { id: "library", icon: "clock", label: "nav.library", title: "pane.library.title", width: "112rem" },
   { id: "download", icon: "scissors", label: "nav.download", title: "pane.setup.title", width: "112rem" },
   { id: "downloads", icon: "download", label: "nav.downloads", title: "pane.downloads.title", width: "84rem" },
   { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "84rem" },

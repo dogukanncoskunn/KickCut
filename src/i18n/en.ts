@@ -6,7 +6,7 @@
 export const en = {
   "app.name": "KickCut",
 
-  "nav.library": "Library",
+  "nav.library": "Broadcasts",
   "nav.download": "Download",
   "nav.downloads": "Downloads",
   "pane.downloads.title": "Downloads",

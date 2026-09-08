@@ -3,7 +3,7 @@ import type { Messages } from "./en";
 export const tr: Messages = {
   "app.name": "KickCut",
 
-  "nav.library": "Kitaplık",
+  "nav.library": "Yayınlar",
   "nav.download": "İndirme",
   "nav.downloads": "İndirilenler",
   "pane.downloads.title": "İndirilenler",

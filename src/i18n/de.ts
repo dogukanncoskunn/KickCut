@@ -3,7 +3,7 @@ import type { Messages } from "./en";
 export const de: Messages = {
   "app.name": "KickCut",
 
-  "nav.library": "Bibliothek",
+  "nav.library": "Streams",
   "nav.download": "Download",
   "nav.downloads": "Downloads",
   "pane.downloads.title": "Downloads",
