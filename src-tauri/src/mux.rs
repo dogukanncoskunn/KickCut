@@ -1,29 +1,31 @@
-//! Turning downloaded segments into one MP4.
+//! Turning downloaded segments into one MP4 an editor can work with.
 //!
-//! This is where the problem that started the project gets fixed. Joining HLS
-//! transport-stream segments into an MP4 with a plain stream copy produces a
-//! file that plays fine and then misbehaves in an editor - audio artefacts,
-//! and a timeline that stutters or stalls part-way through. Three specific
-//! things cause it, and each has a flag:
+//! Two things matter here, and the first is not a flag.
 //!
-//! * **`-bsf:a aac_adtstoasc`** - AAC inside a transport stream is framed as
-//!   ADTS, and MP4 expects a raw AudioSpecificConfig. Copying the frames across
-//!   without converting leaves an ADTS header on every packet. Players tolerate
-//!   it; editors do not, and that is the audio complaint.
-//! * **`-fflags +genpts` with `-avoid_negative_ts make_zero`** - a broadcast's
-//!   timestamps start wherever the encoder happened to be and jump at every
-//!   `EXT-X-DISCONTINUITY`. Timestamps are rebuilt into one continuous run
-//!   starting at zero, which is what stops the timeline stalling.
-//! * **`-video_track_timescale 90000`** - MPEG-TS is a 90 kHz clock. Keeping the
-//!   MP4 on the same base means no rounding drift accumulating across hours.
+//! **The segments are joined into one transport stream before ffmpeg sees
+//! them.** Handing ffmpeg's concat demuxer a list of segment files instead is
+//! the obvious approach, and it stamps 60 fps content as 59.95 fps - a 0.08%
+//! error that an editor turns into progressive audio desync, about nine seconds
+//! across three hours. See `join_segments` for the measurements. This was found
+//! by someone editing a real recording, not by reading the code.
 //!
-//! `-movflags +faststart` is a fourth, less dramatic one: it moves the index to
-//! the front, so an editor can open the file without reading to the end first.
+//! **`-bsf:a aac_adtstoasc`** is the flag that is genuinely needed. AAC inside
+//! a transport stream is framed as ADTS and MP4 expects a raw
+//! AudioSpecificConfig; copying the frames across without converting leaves an
+//! ADTS header on every packet. Players tolerate that, editors do not.
+//!
+//! `-movflags +faststart` moves the index to the front so an editor can open
+//! the file without reading to the end first.
+//!
+//! Nothing else rewrites timestamps. `+genpts`, `-avoid_negative_ts` and
+//! `-video_track_timescale` used to be here and are deliberately gone: they
+//! existed to correct artefacts the concat demuxer introduced, and with one
+//! continuous input there is nothing to correct. The stream already carries the
+//! timestamps the broadcaster's encoder wrote.
 //!
 //! Where a copy still cannot win is across a discontinuity that changes the
-//! encode itself. For that there is the re-encode mode, which rebuilds one
-//! constant-frame-rate stream and is offered whenever the chosen range spans a
-//! break.
+//! encode itself. For that there is the re-encode mode, offered whenever the
+//! chosen range spans a break.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -43,29 +45,63 @@ pub enum MuxMode {
     Reencode,
 }
 
-/// Write the concat script.
+/// Join the segments into one continuous transport stream.
 ///
-/// Entries are bare file names and the script lives in the same directory as
-/// the segments, because the concat demuxer resolves relative paths against the
-/// script's own location. That sidesteps quoting a Windows path - backslashes,
-/// spaces and apostrophes all need escaping in this format, and getting it
-/// subtly wrong fails thousands of lines in.
-pub async fn write_concat_list(dir: &Path, start: usize, end: usize) -> Result<PathBuf, String> {
-    let mut body = String::with_capacity((end - start + 1) * 16);
+/// This is the difference between an MP4 an editor is happy with and one whose
+/// audio slides out of sync over hours, and it took a real report to find.
+///
+/// The obvious approach - hand ffmpeg's concat demuxer a list of the segment
+/// files - is what this used to do, and it stretches the video clock. Measured
+/// on 39 real 720p60 segments, both methods produced byte-identical content -
+/// 23400 video frames, 18282 audio frames - but with different timestamps:
+///
+///   concat demuxer   video 390.314 s   =>  59.9517 fps
+///   joined stream    video 390.000 s   =>  60.0001 fps
+///
+/// The audio is unaffected either way; its length follows from the sample count
+/// at 48 kHz and came out identical to the millisecond. So the video runs 0.08%
+/// slow against it, and that is a rate error, not an offset: it accumulates.
+/// Over a three-hour recording it is roughly nine seconds.
+///
+/// The cause is that the demuxer rebases every entry by the duration its
+/// container *reports*, and an MPEG-TS segment reports slightly more than it
+/// holds - about 7.6 ms per segment here. A player never shows it, because a
+/// player honours each frame's own timestamp. An editor does, because it
+/// conforms the video to a constant rate: Premiere divides 23400 frames by
+/// 390.314 s, lays them out at 59.95 fps, and runs the audio at its true rate
+/// beside them. That is the progressive drift that was reported - correct at
+/// the start, obviously wrong hours in.
+///
+/// Concatenating the bytes avoids the question entirely. MPEG-TS is built to be
+/// joined this way: it is a sequence of fixed 188-byte packets, Kick's segments
+/// come from one continuous encode, and their timestamps already run on across
+/// the boundaries. ffmpeg sees one file carrying the timestamps the
+/// broadcaster's encoder wrote, and has nothing to rebase.
+pub async fn join_segments(dir: &Path, start: usize, end: usize) -> Result<PathBuf, String> {
+    use tokio::io::AsyncWriteExt;
+
+    let joined = dir.join("joined.ts");
+    let file = tokio::fs::File::create(&joined)
+        .await
+        .map_err(|e| format!("The joined stream could not be created: {e}"))?;
+    // Buffered: writing a few hundred megabytes ten at a time through unbuffered
+    // syscalls is needlessly slow.
+    let mut out = tokio::io::BufWriter::with_capacity(1 << 20, file);
+
     for index in start..=end {
-        if !dir.join(format!("{index}.ts")).is_file() {
-            return Err(format!(
-                "Segment {index} is missing, so this clip cannot be assembled. Resume the download."
-            ));
-        }
-        body.push_str(&format!("file '{index}.ts'\n"));
+        let part = dir.join(format!("{index}.ts"));
+        let bytes = tokio::fs::read(&part).await.map_err(|_| {
+            format!("Segment {index} is missing, so this clip cannot be assembled. Resume the download.")
+        })?;
+        out.write_all(&bytes)
+            .await
+            .map_err(|e| format!("Segment {index} could not be appended: {e}"))?;
     }
 
-    let path = dir.join("concat.txt");
-    tokio::fs::write(&path, body)
+    out.flush()
         .await
-        .map_err(|e| format!("The segment list could not be written: {e}"))?;
-    Ok(path)
+        .map_err(|e| format!("The joined stream could not be finished: {e}"))?;
+    Ok(joined)
 }
 
 /// Pick a path that does not overwrite anything.
@@ -94,8 +130,8 @@ pub fn free_output_path(dir: &Path, stem: &str) -> PathBuf {
 /// silently swapped. Grouped, the caller has to name each one.
 #[derive(Debug, Clone)]
 pub struct MuxRequest {
-    /// The concat script; segments are resolved relative to its directory.
-    pub concat_list: PathBuf,
+    /// The joined transport stream to read.
+    pub source: PathBuf,
     pub output: PathBuf,
     pub mode: MuxMode,
     /// Seconds to drop from the front of the first segment.
@@ -112,7 +148,7 @@ pub struct MuxRequest {
 /// rather than only discovered when a file misbehaves in an editor.
 pub fn build_args(request: &MuxRequest) -> Vec<String> {
     let MuxRequest {
-        concat_list,
+        source,
         output,
         mode,
         trim_offset,
@@ -121,29 +157,29 @@ pub fn build_args(request: &MuxRequest) -> Vec<String> {
     } = request;
     let (mode, trim_offset, output_seconds, frame_rate) =
         (*mode, *trim_offset, *output_seconds, *frame_rate);
-    let mut args: Vec<String> = vec![
-        "-hide_banner".into(),
-        "-nostdin".into(),
-        "-y".into(),
-        // Input options. genpts has to precede -i to apply to this input.
-        "-fflags".into(),
-        "+genpts".into(),
-        "-f".into(),
-        "concat".into(),
-        "-safe".into(),
-        "0".into(),
-        "-i".into(),
-        concat_list.display().to_string(),
-    ];
+    let mut args: Vec<String> = vec!["-hide_banner".into(), "-nostdin".into(), "-y".into()];
 
-    // Output-side seek. The download always starts on a segment boundary at or
-    // before the requested time, and this drops the difference. It is on the
-    // output side deliberately: seeking a concat input is imprecise, and here
-    // the cost is only that a stream copy lands on the next keyframe.
+    /*
+     * Input-side seek, on a single continuous stream.
+     *
+     * Both halves of that matter. The input is one joined transport stream
+     * rather than a concat list, so there is no per-file timestamp rebasing to
+     * accumulate into audio drift - see `join_segments`. And the seek is before
+     * -i, so ffmpeg jumps to a keyframe and copies from there rather than
+     * reading the whole timeline and re-stamping the part it keeps.
+     *
+     * Nothing here rewrites timestamps. The stream carries the ones the
+     * broadcaster's encoder wrote, and they are correct; the flags that used to
+     * be here - +genpts, -avoid_negative_ts, -video_track_timescale - existed
+     * to paper over artefacts of the concat demuxer that no longer occur.
+     */
     if trim_offset > 0.05 {
         args.push("-ss".into());
         args.push(format!("{trim_offset:.3}"));
     }
+    args.push("-i".into());
+    args.push(source.display().to_string());
+
     if output_seconds > 0.0 {
         args.push("-t".into());
         args.push(format!("{output_seconds:.3}"));
@@ -182,10 +218,6 @@ pub fn build_args(request: &MuxRequest) -> Vec<String> {
     }
 
     args.extend([
-        "-avoid_negative_ts".into(),
-        "make_zero".into(),
-        "-video_track_timescale".into(),
-        "90000".into(),
         "-movflags".into(),
         "+faststart".into(),
         // Machine-readable progress on stdout, so nothing has to scrape the
@@ -272,6 +304,15 @@ pub struct Verified {
     pub seconds: f64,
     pub has_video: bool,
     pub has_audio: bool,
+    /// Frames divided by the video stream's own duration.
+    ///
+    /// Checked because the bug this module was rewritten for is invisible until
+    /// someone is hours into an edit: a stretched timeline stamps 60 fps content
+    /// as 59.95, and only an editor conforming it to a constant rate makes that
+    /// visible. Comparing the implied rate against the one the stream declares
+    /// catches it here instead.
+    pub implied_fps: f64,
+    pub declared_fps: f64,
 }
 
 /// Check the output before telling anyone it is ready.
@@ -310,11 +351,29 @@ pub async fn verify(tools: &Tools, output: &Path, expected_seconds: f64) -> Resu
         .unwrap_or(0.0);
     let streams = parsed["streams"].as_array().cloned().unwrap_or_default();
     let kind = |want: &str| streams.iter().any(|s| s["codec_type"].as_str() == Some(want));
+    let video = streams.iter().find(|s| s["codec_type"].as_str() == Some("video"));
+
+    // "60/1" as ffprobe writes it.
+    let ratio = |raw: Option<&str>| -> f64 {
+        raw.and_then(|r| r.split_once('/'))
+            .and_then(|(n, d)| Some(n.parse::<f64>().ok()? / d.parse::<f64>().ok()?.max(1.0)))
+            .unwrap_or(0.0)
+    };
+    let frames = video
+        .and_then(|v| v["nb_frames"].as_str())
+        .and_then(|n| n.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    let video_seconds = video
+        .and_then(|v| v["duration"].as_str())
+        .and_then(|d| d.parse::<f64>().ok())
+        .unwrap_or(0.0);
 
     let result = Verified {
         seconds,
         has_video: kind("video"),
         has_audio: kind("audio"),
+        implied_fps: if video_seconds > 0.0 { frames / video_seconds } else { 0.0 },
+        declared_fps: ratio(video.and_then(|v| v["r_frame_rate"].as_str())),
     };
 
     if !result.has_video {
@@ -323,6 +382,26 @@ pub async fn verify(tools: &Tools, output: &Path, expected_seconds: f64) -> Resu
     if !result.has_audio {
         return Err("The finished file has no audio track.".into());
     }
+    /*
+     * The rate check.
+     *
+     * If the container says the video lasts longer than its frames account for,
+     * an editor conforming it to a constant rate will run the picture slow
+     * against the audio, and the gap widens for as long as the clip lasts.
+     * Half a percent over three hours is already a minute; the tolerance is a
+     * tenth of that, which is comfortably above ordinary rounding and far below
+     * anything a person would notice.
+     */
+    if result.declared_fps > 0.0 && result.implied_fps > 0.0 {
+        let off = (result.implied_fps - result.declared_fps).abs() / result.declared_fps;
+        if off > 0.0005 {
+            return Err(format!(
+                "The finished file's timing is wrong: {:.4} fps of picture against a declared {:.4}.                  It would slide out of sync in an editor, so it was not accepted.",
+                result.implied_fps, result.declared_fps
+            ));
+        }
+    }
+
     // A stream copy cuts on a keyframe, so a couple of seconds either way is
     // expected; anything past that means the wrong media was assembled.
     let drift = (seconds - expected_seconds).abs();
@@ -352,7 +431,7 @@ mod tests {
 
     fn args_of(mode: MuxMode, trim: f64) -> Vec<String> {
         build_args(&MuxRequest {
-            concat_list: PathBuf::from("C:/parts/x/concat.txt"),
+            source: PathBuf::from("C:/parts/x/joined.ts"),
             output: PathBuf::from("C:/out/clip.mp4"),
             mode,
             trim_offset: trim,
@@ -361,37 +440,62 @@ mod tests {
         })
     }
 
-    /// The three flags this module exists for. If any of them is dropped, the
-    /// output goes back to misbehaving in an editor - which is not something a
-    /// test can observe, so it is pinned here instead.
+    /// A copy carries the one bitstream filter it needs, and nothing else.
     #[test]
-    fn a_stream_copy_carries_the_fixes_that_make_it_editable() {
+    fn a_stream_copy_converts_the_audio_framing_and_leaves_the_rest_alone() {
         let args = args_of(MuxMode::Copy, 1.3).join(" ");
         assert!(args.contains("-bsf:a aac_adtstoasc"), "ADTS to ASC conversion missing");
-        assert!(args.contains("-fflags +genpts"), "timestamp rebuild missing");
-        assert!(args.contains("-avoid_negative_ts make_zero"), "zero-basing missing");
-        assert!(args.contains("-video_track_timescale 90000"), "90 kHz timebase missing");
         assert!(args.contains("-movflags +faststart"), "faststart missing");
         assert!(args.contains("-c copy"), "should not re-encode");
     }
 
-    /// genpts is an input option: after -i it silently applies to nothing.
+    /// The regression this module was rewritten for.
+    ///
+    /// Every one of these rewrites timestamps, and every one of them was here
+    /// to correct something the concat demuxer did. With a single joined input
+    /// there is nothing to correct, and re-adding them would quietly bring back
+    /// the audio drift that made the output unusable in Premiere - a symptom
+    /// that only appears hours into a recording, which is far too late to
+    /// discover it.
     #[test]
-    fn input_flags_come_before_the_input() {
-        let args = args_of(MuxMode::Copy, 0.0);
-        let genpts = args.iter().position(|a| a == "+genpts").expect("genpts");
-        let input = args.iter().position(|a| a == "-i").expect("-i");
-        assert!(genpts < input, "+genpts must precede -i");
+    fn nothing_rewrites_timestamps() {
+        for mode in [MuxMode::Copy, MuxMode::Reencode] {
+            let args = args_of(mode, 1.3).join(" ");
+            for flag in [
+                "+genpts",
+                "-avoid_negative_ts",
+                "-video_track_timescale",
+                "-copyts",
+                "-start_at_zero",
+                "-reset_timestamps",
+                "-itsoffset",
+                "-output_ts_offset",
+                "-async",
+                "-af aresample",
+            ] {
+                assert!(!args.contains(flag), "{flag} is back in {mode:?} mode");
+            }
+        }
     }
 
-    /// -ss after -i is an output seek. Before -i it would seek the concat
-    /// input, which is imprecise, so the order is load-bearing.
+    /// The input must be one file, not a list of them.
     #[test]
-    fn the_trim_is_an_output_seek() {
+    fn the_input_is_a_single_joined_stream() {
+        let args = args_of(MuxMode::Copy, 0.0);
+        assert!(!args.iter().any(|a| a == "concat"), "concat demuxer is back");
+        let input = args.iter().position(|a| a == "-i").expect("-i");
+        assert!(args[input + 1].ends_with("joined.ts"), "input is {}", args[input + 1]);
+    }
+
+    /// -ss before -i seeks the input and copies from a keyframe. After -i it
+    /// would read the whole timeline and re-stamp what it keeps, which is the
+    /// kind of timestamp rewriting this module now avoids on purpose.
+    #[test]
+    fn the_trim_seeks_the_input() {
         let args = args_of(MuxMode::Copy, 1.3);
         let input = args.iter().position(|a| a == "-i").expect("-i");
         let ss = args.iter().position(|a| a == "-ss").expect("-ss");
-        assert!(ss > input, "-ss must follow -i");
+        assert!(ss < input, "-ss must precede -i");
         assert_eq!(args[ss + 1], "1.300");
     }
 
@@ -427,24 +531,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_missing_segment_stops_the_mux_rather_than_producing_a_short_clip() {
-        let dir = std::env::temp_dir().join("kickcut-concat-test");
+    async fn segments_are_joined_in_order_and_a_gap_stops_the_mux() {
+        let dir = std::env::temp_dir().join("kickcut-join-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("0.ts"), b"x").unwrap();
-        std::fs::write(dir.join("2.ts"), b"x").unwrap();
+        std::fs::write(dir.join("0.ts"), b"AAA").unwrap();
+        std::fs::write(dir.join("2.ts"), b"CCC").unwrap();
 
-        // Segment 1 is absent. Assembling 0 and 2 would silently drop ten
-        // seconds out of the middle, which is worse than failing.
-        let err = write_concat_list(&dir, 0, 2).await.expect_err("should refuse");
+        // Segment 1 is absent. Joining 0 and 2 would silently drop ten seconds
+        // out of the middle, which is worse than failing.
+        let err = join_segments(&dir, 0, 2).await.expect_err("should refuse");
         assert!(err.contains("Segment 1"), "unhelpful message: {err}");
 
-        std::fs::write(dir.join("1.ts"), b"x").unwrap();
-        let list = write_concat_list(&dir, 0, 2).await.expect("should succeed");
-        let body = std::fs::read_to_string(&list).unwrap();
-        // Relative names, in order - the demuxer resolves them next to the
-        // script, so no Windows path ever has to be escaped.
-        assert_eq!(body, "file '0.ts'\nfile '1.ts'\nfile '2.ts'\n");
+        std::fs::write(dir.join("1.ts"), b"BBB").unwrap();
+        let joined = join_segments(&dir, 0, 2).await.expect("should succeed");
+        // Byte for byte, in order. A transport stream is a sequence of packets,
+        // and appending them is exactly what keeps the encoder's own timestamps
+        // running on across the boundaries.
+        assert_eq!(std::fs::read(&joined).unwrap(), b"AAABBBCCC");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -508,7 +612,7 @@ mod tests {
         let trim = 1.5;
         let wanted = covered - trim - 1.0;
 
-        let list = write_concat_list(&dir, 0, take - 1).await.expect("concat list");
+        let joined = join_segments(&dir, 0, take - 1).await.expect("join");
         let output = dir.join("clip.mp4");
         let cancel = AtomicBool::new(false);
         let seen = std::sync::Arc::new(AtomicU64::new(0));
@@ -517,7 +621,7 @@ mod tests {
         run(
             &tools,
             &MuxRequest {
-                concat_list: list,
+                source: joined,
                 output: output.clone(),
                 mode: MuxMode::Copy,
                 trim_offset: trim,
@@ -536,6 +640,14 @@ mod tests {
         // The check the app itself runs before calling a job done.
         let verified = verify(&tools, &output, wanted).await.expect("verify");
         assert!(verified.has_video && verified.has_audio);
+        // The regression that made the output unusable in Premiere: a stretched
+        // timeline shows up here as an implied rate below the declared one.
+        assert!(
+            (verified.implied_fps - verified.declared_fps).abs() / verified.declared_fps < 0.0005,
+            "timeline is stretched: {:.4} fps implied against {:.4} declared",
+            verified.implied_fps,
+            verified.declared_fps
+        );
         assert!(
             (verified.seconds - wanted).abs() < 3.0,
             "expected about {wanted:.1}s, got {:.1}s",

@@ -552,7 +552,7 @@ async fn assemble(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<
         .ok_or("ffmpeg is not installed, so this clip cannot be assembled.")?;
 
     let dir = parts_dir(app, &job.id)?;
-    let list = mux::write_concat_list(&dir, job.start_index, job.end_index).await?;
+    let joined = mux::join_segments(&dir, job.start_index, job.end_index).await?;
     let output = mux::free_output_path(Path::new(&job.output_dir), &job.file_name);
 
     let fraction = Arc::new(mux::MuxProgress::new(0));
@@ -576,7 +576,7 @@ async fn assemble(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<
     let result = mux::run(
         &tools,
         &mux::MuxRequest {
-            concat_list: list,
+            source: joined,
             output: output.clone(),
             mode: job.mux_mode,
             trim_offset: job.trim_offset,
