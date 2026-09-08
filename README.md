@@ -10,6 +10,24 @@ Grab the latest `KickCut_x.y.z_x64-setup.exe` from
 installs for the current user, so Windows will not ask for administrator
 rights.
 
+**Windows will warn you.** KickCut is not code-signed, so SmartScreen shows
+"Windows protected your PC" and names the publisher as unknown. Choose **More
+info**, then **Run anyway**. Signing certificates are an annual cost and — since
+Microsoft stopped granting signed apps immediate SmartScreen reputation in 2024
+— would not remove that warning for a new project anyway.
+
+If you want to be sure the file is the one published here and was not altered
+on its way to you, every release lists the installer's SHA-256. Compare it:
+
+```powershell
+Get-FileHash KickCut_0.1.0_x64-setup.exe -Algorithm SHA256
+```
+
+That proves the file matches what was built from this repository. It does not
+make an unknown program safe — it answers "is this the real one", which is the
+question worth asking when an installer reaches you through chat rather than
+from the release page.
+
 On first launch, open **Settings** and install FFmpeg. It is a one-time 106 MB
 download, pinned to a specific build and checked against its published
 SHA-256; KickCut keeps it in its own folder and never touches your PATH. If

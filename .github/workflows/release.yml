@@ -47,14 +47,23 @@ jobs:
           $exe = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *-setup.exe |
             Select-Object -First 1
           if (-not $exe) { throw "No NSIS installer was produced." }
+          # The app is unsigned, so a downloader has no way to tell a genuine
+          # copy from one that was altered on its way to them - especially when
+          # it arrives forwarded through chat rather than from the release page.
+          # Publishing the hash gives them something to check against.
+          $sha = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
           "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
           "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+          "sha256=$sha" >> $env:GITHUB_OUTPUT
+          "$($exe.Name)  $sha" | Write-Host
 
       - name: Upload to the release
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          ASSET_NAME: ${{ steps.installer.outputs.name }}
+          ASSET_SHA: ${{ steps.installer.outputs.sha256 }}
         run: |
           $tag = "${{ github.ref_name }}"
           # Created here rather than by hand, so a tag push is the whole
@@ -63,6 +72,31 @@ jobs:
             gh release create $tag --title $tag --generate-notes
           }
           gh release upload $tag "${{ steps.installer.outputs.path }}" --clobber
+
+          # Appended to whatever notes were generated, rather than replacing
+          # them, so the changelog survives.
+          $body = gh release view $tag --json body -q .body
+          $verify = @"
+
+## Verifying your download
+
+Windows will warn that the publisher is unknown - the app is not code-signed.
+Choose **More info**, then **Run anyway**.
+
+To confirm the file is the one published here and was not altered on the way,
+compare its fingerprint:
+
+``````powershell
+Get-FileHash $($env:ASSET_NAME) -Algorithm SHA256
+``````
+
+``````
+$($env:ASSET_SHA)
+``````
+"@
+          if ($body -notmatch "Verifying your download") {
+            gh release edit $tag --notes "$body$verify"
+          }
 
       # On a manual run there is no tag to attach to, so the build is kept as
       # an artifact instead of being thrown away.
