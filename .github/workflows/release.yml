@@ -38,6 +38,12 @@ jobs:
       # first, because tauri.conf.json runs `npm run build` before bundling, so
       # a release can never be cut from code that does not compile.
       - name: Build the installer
+        env:
+          # Signs the updater artifact. Without these the build still produces
+          # an installer, but no .sig - and an installed copy refuses an update
+          # it cannot verify, which is the point of signing it.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri:build
 
       - name: Find the installer
@@ -64,6 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ASSET_NAME: ${{ steps.installer.outputs.name }}
           ASSET_SHA: ${{ steps.installer.outputs.sha256 }}
+          ASSET_PATH: ${{ steps.installer.outputs.path }}
         run: |
           $tag = "${{ github.ref_name }}"
           # Created here rather than by hand, so a tag push is the whole
@@ -72,6 +79,28 @@ jobs:
             gh release create $tag --title $tag --generate-notes
           }
           gh release upload $tag "${{ steps.installer.outputs.path }}" --clobber
+
+          # latest.json is what an installed copy reads to learn a newer one
+          # exists. It carries the signature rather than the installer, so the
+          # check is a few hundred bytes and only a real update costs a
+          # download. Published to this release, and read through the
+          # /releases/latest/download/ path, so cutting a tag is still the whole
+          # procedure.
+          $sig = Get-Content "$($env:ASSET_PATH).sig" -Raw -ErrorAction SilentlyContinue
+          if (-not $sig) { throw "No .sig was produced - is the signing key set?" }
+          $manifest = [ordered]@{
+            version   = $tag.TrimStart("v")
+            notes     = "See the release notes for $tag."
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                signature = $sig.Trim()
+                url = "https://github.com/${{ github.repository }}/releases/download/$tag/$($env:ASSET_NAME)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content latest.json -Encoding utf8
+          gh release upload $tag latest.json --clobber
 
           # Appended to whatever notes were generated, rather than replacing
           # them, so the changelog survives.

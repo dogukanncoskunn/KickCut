@@ -4,6 +4,7 @@ import type { Locale } from "./i18n";
 import { ErrorBoundary } from "./lib/ErrorBoundary";
 import { FloatingDownload } from "./lib/FloatingDownload";
 import { useSelection } from "./lib/Selection";
+import { UpdateNotice } from "./lib/Updater";
 import { useTheme } from "./lib/Theme";
 import { Dropdown, Icon, Note } from "./lib/ui";
 import type { IconName } from "./lib/ui";
@@ -143,6 +144,7 @@ export function App() {
 
       {/* On the Download tab the rail already shows it. */}
       <FloatingDownload hidden={tab === "download"} />
+      <UpdateNotice />
     </div>
   );
 }
