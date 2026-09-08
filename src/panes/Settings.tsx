@@ -3,6 +3,7 @@ import { useT } from "../i18n";
 import { useFfmpeg } from "../lib/Ffmpeg";
 import { bytes } from "../lib/format";
 import { useMotion } from "../lib/Motion";
+import { AutoResumeControl } from "../lib/AutoResume";
 import { SpeedControl } from "../lib/SpeedControl";
 import { Badge, Button, Card, Note, ProgressBar, Spinner, Toggle } from "../lib/ui";
 
@@ -30,6 +31,10 @@ export function Settings() {
 
       <SettingCard title={t("speed.label")} hint={t("speed.hint")}>
         <SpeedControl />
+      </SettingCard>
+
+      <SettingCard title={t("queue.autoResume")} hint={t("queue.autoResume.hint")}>
+        <AutoResumeControl />
       </SettingCard>
 
       <SettingCard title={t("settings.motion")} hint={t("settings.motion.hint")}>

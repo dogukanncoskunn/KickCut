@@ -16,7 +16,7 @@
 //! than both finishing late.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -24,14 +24,54 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::hls::parse_media;
-use crate::kick::{client, get_text};
+use crate::kick::get_text;
 use crate::mux::{self, MuxMode};
 use crate::rate::RateLimiter;
 
 /// Concurrent segment requests. Eight saturates a fast connection without
 /// making the app the reason the rest of the machine feels slow.
 const DEFAULT_CONCURRENCY: usize = 8;
-const MAX_ATTEMPTS: u32 = 4;
+
+/// Attempts per segment before a job is failed.
+///
+/// Ten, not four. A segment is one of thousands and the cost of retrying is a
+/// few seconds; the cost of giving up is an abandoned multi-hour download.
+const MAX_ATTEMPTS: u32 = 10;
+const MAX_BACKOFF: Duration = Duration::from_secs(8);
+
+/// How many times a job restarts itself after coming up short.
+///
+/// A retry costs almost nothing - only the missing segments are fetched again -
+/// and the failures this recovers from are transient by nature. The cap exists
+/// for the case that is not transient: a segment Kick has actually pruned would
+/// otherwise loop forever.
+const MAX_AUTO_RETRIES: u32 = 5;
+/// Long enough for a bad patch of connection to pass, short enough that someone
+/// watching does not think it has given up.
+const AUTO_RETRY_DELAY: Duration = Duration::from_secs(20);
+
+/// Segments are fetched with their own client, and the reason is the bug this
+/// constant exists to prevent.
+///
+/// The client the rest of the app uses caps a whole request at 30 s. That is
+/// right for a playlist and wrong for a segment: at 1080p60 a segment is about
+/// 10 MB, so a connection running at 0.3 MB/s needs over half a minute just to
+/// transfer one and hits the cap mid-body - which reqwest reports as "error
+/// decoding response body", not as a timeout, so it does not even look like
+/// what it is. The same segment then succeeds on a faster moment, which is
+/// exactly the maddening pattern that was reported.
+///
+/// What needs a deadline here is a stall, not the transfer. A slow connection
+/// is allowed to take as long as it takes.
+fn segment_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent(crate::kick::UA)
+        .connect_timeout(Duration::from_secs(30))
+        .read_timeout(Duration::from_secs(60))
+        .pool_idle_timeout(Duration::from_secs(90))
+        .build()
+        .map_err(|e| format!("HTTP client could not be created: {e}"))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,9 +114,26 @@ pub struct Job {
     /// Set once the file exists, so the queue can offer to open it.
     #[serde(default)]
     pub output_path: Option<String>,
+    /// Segments that never downloaded, with the minutes of the broadcast they
+    /// cover. Empty on a clean run; cleared whenever a retry succeeds.
+    #[serde(default)]
+    pub failed_segments: Vec<FailedSegment>,
     pub state: JobState,
     pub created_at: u64,
     pub error: Option<String>,
+}
+
+/// A segment that never downloaded, and where it sits in the broadcast.
+///
+/// The index alone is useless to anyone - "segment 1455 failed" says nothing
+/// about what is missing. The times say it in the terms the user chose the
+/// range in.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedSegment {
+    pub index: usize,
+    pub start_seconds: f64,
+    pub end_seconds: f64,
 }
 
 impl Job {
@@ -119,6 +176,10 @@ pub struct Downloads {
     live: Mutex<Option<Live>>,
     /// Shared by every worker of every job, and adjustable mid-download.
     pub limiter: Arc<RateLimiter>,
+    /// Whether a job that came up short puts itself back in the queue.
+    pub auto_resume: AtomicBool,
+    /// Automatic retries already spent, per job.
+    auto_retries: Mutex<HashMap<String, u32>>,
 }
 
 struct Live {
@@ -137,6 +198,11 @@ impl Default for Downloads {
             muxing: Mutex::new(None),
             live: Mutex::new(None),
             limiter: Arc::new(RateLimiter::default()),
+            // On by default: leaving a multi-hour download running unattended
+            // is the normal way to use this, and a transient failure should not
+            // mean finding it stopped hours later.
+            auto_resume: AtomicBool::new(true),
+            auto_retries: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -392,7 +458,7 @@ fn pump(app: &AppHandle) {
          * a job only reports Done once the file has been read back.
          */
         let outcome: Result<JobState, String> = match downloaded {
-            Ok(true) => {
+            Ok(Outcome::Finished) => {
                 if let Some(updated) = state.set_state(&id, JobState::Muxing, None) {
                     let _ = save(&app, &updated).await;
                 }
@@ -402,7 +468,12 @@ fn pump(app: &AppHandle) {
                         if let Ok(mut jobs) = state.jobs.lock() {
                             if let Some(entry) = jobs.iter_mut().find(|j| j.id == id) {
                                 entry.output_path = Some(path);
+                                entry.failed_segments.clear();
                             }
+                        }
+                        // A clean finish forgets whatever retries it took.
+                        if let Ok(mut retries) = state.auto_retries.lock() {
+                            retries.remove(&id);
                         }
                         Ok(JobState::Done)
                     }
@@ -410,7 +481,40 @@ fn pump(app: &AppHandle) {
                 }
             }
             // Stopped on request: the segments stay on disk, ready to resume.
-            Ok(false) => Ok(JobState::Paused),
+            Ok(Outcome::Stopped) => Ok(JobState::Paused),
+            // Some segments never arrived. The job is not muxed - a clip with
+            // silent gaps in it is worse than no clip - but everything else
+            // stays on disk, and the record of what is missing goes onto the
+            // job so the user can see which minutes are affected.
+            Ok(Outcome::Incomplete(missing)) => {
+                if let Ok(mut jobs) = state.jobs.lock() {
+                    if let Some(entry) = jobs.iter_mut().find(|j| j.id == id) {
+                        entry.failed_segments = missing.clone();
+                    }
+                }
+
+                let spent = state
+                    .auto_retries
+                    .lock()
+                    .map(|mut m| {
+                        let n = m.entry(id.clone()).or_insert(0);
+                        *n += 1;
+                        *n
+                    })
+                    .unwrap_or(u32::MAX);
+
+                if state.auto_resume.load(Ordering::Relaxed) && spent <= MAX_AUTO_RETRIES {
+                    // Only the missing segments are fetched on the way round,
+                    // so a retry costs seconds rather than starting over.
+                    tokio::time::sleep(AUTO_RETRY_DELAY).await;
+                    Ok(JobState::Queued)
+                } else {
+                    Err(format!(
+                        "{} segment(s) could not be downloaded after {MAX_ATTEMPTS} attempts each.",
+                        missing.len()
+                    ))
+                }
+            }
             Err(problem) => Err(problem),
         };
 
@@ -494,9 +598,20 @@ async fn assemble(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<
     Ok(output.display().to_string())
 }
 
-/// Fetch every missing segment. `Ok(true)` means finished, `Ok(false)` means
-/// stopped on request.
-async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<bool, String> {
+/// How a download run ended.
+///
+/// `Incomplete` is deliberately not an `Err`: everything that did download is
+/// on disk, the job can be retried and will fetch only what is missing, and the
+/// list is what the user is shown. An error string would lose all of that.
+enum Outcome {
+    Finished,
+    /// Paused or cancelled on request.
+    Stopped,
+    Incomplete(Vec<FailedSegment>),
+}
+
+/// Fetch every missing segment.
+async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<Outcome, String> {
     let dir = parts_dir(app, &job.id)?;
     tokio::fs::create_dir_all(&dir)
         .await
@@ -532,17 +647,17 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
     emit_queue(app);
 
     if todo.is_empty() {
-        return Ok(true);
+        return Ok(Outcome::Finished);
     }
 
-    let http = client()?;
+    let http = segment_client()?;
     let limiter = app.state::<Downloads>().limiter.clone();
     // No more workers than there is work: a three-segment resume should not
     // open eight connections.
     let worker_count = DEFAULT_CONCURRENCY.min(todo.len());
     let queue = Arc::new(Mutex::new(todo));
     let stopped = Arc::new(AtomicBool::new(false));
-    let failure: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let failure: Arc<Mutex<Vec<usize>>> = Arc::new(Mutex::new(Vec::new()));
 
     let mut workers = Vec::new();
     for _ in 0..worker_count {
@@ -563,9 +678,6 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
                     stopped.store(true, Ordering::Relaxed);
                     return;
                 }
-                if failure.lock().map(|f| f.is_some()).unwrap_or(true) {
-                    return;
-                }
                 let Some(index) = queue.lock().ok().and_then(|mut q| q.pop()) else {
                     return;
                 };
@@ -583,11 +695,16 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
                         stopped.store(true, Ordering::Relaxed);
                         return;
                     }
-                    Err(e) => {
-                        if let Ok(mut slot) = failure.lock() {
-                            slot.get_or_insert(e);
+                    // One segment gave up after every attempt. The rest of the
+                    // run continues: aborting here would leave the user knowing
+                    // about one gap when there might be three, and would throw
+                    // away the segments still queued behind it. They are all
+                    // reported together at the end, and everything that did
+                    // download stays on disk for the retry.
+                    Err(_) => {
+                        if let Ok(mut list) = failure.lock() {
+                            list.push(index);
                         }
-                        return;
                     }
                 }
             }
@@ -599,12 +716,10 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
     let ticker = {
         let app = app.clone();
         let stopped = stopped.clone();
-        let failure = failure.clone();
         tauri::async_runtime::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(250)).await;
-                if stopped.load(Ordering::Relaxed) || failure.lock().map(|f| f.is_some()).unwrap_or(true)
-                {
+                if stopped.load(Ordering::Relaxed) {
                     return;
                 }
                 emit_queue(&app);
@@ -617,14 +732,32 @@ async fn run_job(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<b
     }
     ticker.abort();
 
-    if let Some(problem) = failure.lock().ok().and_then(|f| f.clone()) {
-        return Err(problem);
-    }
     if control.cancel.load(Ordering::Relaxed) {
         let _ = tokio::fs::remove_dir_all(&dir).await;
-        return Ok(false);
+        return Ok(Outcome::Stopped);
     }
-    Ok(!stopped.load(Ordering::Relaxed))
+
+    let mut missing = failure.lock().map(|f| f.clone()).unwrap_or_default();
+    if !missing.is_empty() {
+        missing.sort_unstable();
+        // Translated into broadcast times here, where the playlist is still in
+        // hand. An index means nothing to the person reading the warning.
+        return Ok(Outcome::Incomplete(
+            missing
+                .into_iter()
+                .map(|index| FailedSegment {
+                    index,
+                    start_seconds: playlist.starts[index],
+                    end_seconds: playlist.starts[index] + playlist.segments[index].duration,
+                })
+                .collect(),
+        ));
+    }
+
+    if stopped.load(Ordering::Relaxed) {
+        return Ok(Outcome::Stopped);
+    }
+    Ok(Outcome::Finished)
 }
 
 /// Fetch one segment to `dir`. `Ok(None)` means it was stopped part-way.
@@ -664,7 +797,7 @@ async fn fetch_segment(
                 // Backing off matters: a CDN hiccup answered by eight workers
                 // retrying immediately is how a slow moment becomes a failure.
                 tokio::time::sleep(delay).await;
-                delay *= 2;
+                delay = (delay * 2).min(MAX_BACKOFF);
             }
         }
     }
@@ -779,6 +912,7 @@ pub async fn enqueue_job(app: AppHandle, job: NewJob) -> Result<String, String> 
         mux_mode: job.mux_mode,
         frame_rate: job.frame_rate,
         output_path: None,
+        failed_segments: Vec::new(),
         state: JobState::Queued,
         created_at,
         error: None,
@@ -802,6 +936,14 @@ fn next_sequence() -> u64 {
 ///
 /// Takes effect on the next chunk of whatever is already running, which is the
 /// only time anyone actually reaches for this.
+/// Turn automatic retrying of a short download on or off.
+#[tauri::command]
+pub fn set_auto_resume(app: AppHandle, enabled: bool) {
+    app.state::<Downloads>()
+        .auto_resume
+        .store(enabled, Ordering::Relaxed);
+}
+
 #[tauri::command]
 pub fn set_speed_limit(app: AppHandle, bytes_per_second: u64) {
     app.state::<Downloads>().limiter.set(bytes_per_second);
@@ -896,6 +1038,7 @@ mod tests {
             mux_mode: MuxMode::Copy,
             frame_rate: 60.0,
             output_path: None,
+            failed_segments: Vec::new(),
             state: JobState::Queued,
             created_at: 0,
             error: None,
@@ -904,4 +1047,48 @@ mod tests {
         // of the clip, so an off-by-one here loses the last ten seconds.
         assert_eq!(job.segment_count(), 1257);
     }
+}
+
+/* --------------------------------------------------------------- reveal -- */
+
+/// Show a finished file in Explorer, selected, or open a folder.
+///
+/// Done here rather than through the opener plugin: opening a path through it
+/// needs a scope allowlist, and without one the button silently does nothing -
+/// which is exactly what it was doing. A single command with an obvious
+/// implementation is easier to trust than a permission that fails quietly.
+#[tauri::command]
+pub fn reveal(path: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    if !target.exists() {
+        return Err("That file or folder is no longer there.".into());
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // `/select,` highlights the file inside its folder; a directory is
+        // opened directly, since selecting it would highlight it in its parent.
+        let mut cmd = std::process::Command::new("explorer.exe");
+        if target.is_dir() {
+            cmd.arg(&target);
+        } else {
+            cmd.raw_arg(format!("/select,\"{}\"", target.display()));
+        }
+        // explorer.exe returns a non-zero exit code even when it succeeds, so
+        // only a failure to start it is worth reporting.
+        cmd.spawn()
+            .map_err(|e| format!("Explorer could not be opened: {e}"))?;
+    }
+    #[cfg(not(windows))]
+    {
+        let dir = if target.is_dir() { target.clone() } else {
+            target.parent().map(|p| p.to_path_buf()).unwrap_or(target.clone())
+        };
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("The file manager could not be opened: {e}"))?;
+    }
+    Ok(())
 }

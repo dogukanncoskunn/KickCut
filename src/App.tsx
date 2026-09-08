@@ -2,29 +2,32 @@ import { useEffect, useState } from "react";
 import { LOCALES, LOCALE_NAMES, useLocale, useT } from "./i18n";
 import type { Locale } from "./i18n";
 import { ErrorBoundary } from "./lib/ErrorBoundary";
+import { FloatingDownload } from "./lib/FloatingDownload";
 import { useSelection } from "./lib/Selection";
+import { useTheme } from "./lib/Theme";
 import { Dropdown, Icon, Note } from "./lib/ui";
 import type { IconName } from "./lib/ui";
 import { Library } from "./panes/Library";
 import { Download } from "./panes/Download";
+import { Downloads } from "./panes/Downloads";
 import { Settings } from "./panes/Settings";
 import type { MessageKey } from "./i18n/en";
-import { useTheme } from "./lib/Theme";
 import logoDark from "./assets/logo-dark.png";
 import logoLight from "./assets/logo-light.png";
 
 /*
- * Three screens, one useState. There is no router because there are no URLs
+ * Four screens, one useState. There is no router because there are no URLs
  * worth addressing in a desktop tool, and no state library because the only
  * things shared across panes are the selected broadcast and the job queue,
  * which have a small context each.
  */
-type TabId = "library" | "download" | "settings";
+type TabId = "library" | "download" | "downloads" | "settings";
 
 const TABS: { id: TabId; icon: IconName; label: MessageKey; title: MessageKey; width: string }[] = [
   { id: "library", icon: "library", label: "nav.library", title: "pane.library.title", width: "78rem" },
   // Wider than the others because it carries the queue rail alongside the form.
-  { id: "download", icon: "download", label: "nav.download", title: "pane.setup.title", width: "88rem" },
+  { id: "download", icon: "scissors", label: "nav.download", title: "pane.setup.title", width: "88rem" },
+  { id: "downloads", icon: "download", label: "nav.downloads", title: "pane.downloads.title", width: "68rem" },
   // Wide enough for three setting cards on one row.
   { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "68rem" },
 ];
@@ -41,8 +44,6 @@ export function App() {
     if (vod) setTab("download");
   }, [vod]);
 
-  const active = TABS.find((x) => x.id === tab)!;
-
   return (
     <div className="flex h-full flex-col bg-ink">
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
@@ -58,8 +59,7 @@ export function App() {
         {/*
           Language sits here rather than in Settings. It is the one preference
           someone may need on any screen - most often because the screen they
-          are looking at is in the wrong language - and making them find
-          Settings first is exactly the wrong place for it.
+          are looking at is in the wrong language.
         */}
         <div className="ml-auto flex items-center gap-1.5">
           <LanguagePicker />
@@ -102,27 +102,47 @@ export function App() {
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex flex-col gap-6 px-8 py-7" style={{ maxWidth: active.width }}>
-            <h1 className="font-display text-page font-semibold tracking-tight text-body">
-              {t(active.title)}
-            </h1>
-            {/* Keyed by tab so a crashed pane resets by switching away and back. */}
-            <ErrorBoundary
-              key={tab}
-              fallback={(message) => (
-                <Note kind="error">
-                  <p className="font-medium">{t("error.boundary")}</p>
-                  <p className="mt-1 font-mono text-small opacity-80">{message}</p>
-                </Note>
-              )}
+          {/*
+            Every pane stays mounted and the inactive ones are hidden.
+            Unmounting them threw away their state, so switching tabs mid-setup
+            wiped the quality, the range and the folder you had just chosen -
+            and a channel you had searched for. Hiding costs one hidden subtree
+            and keeps all of it.
+          */}
+          {TABS.map((pane) => (
+            <div
+              key={pane.id}
+              className="mx-auto flex flex-col gap-6 px-8 py-7"
+              style={
+                pane.id === tab
+                  ? { maxWidth: pane.width }
+                  : // Hidden rather than unmounted, so its state survives.
+                    { display: "none" }
+              }
             >
-              {tab === "library" ? <Library /> : null}
-              {tab === "download" ? <Download /> : null}
-              {tab === "settings" ? <Settings /> : null}
-            </ErrorBoundary>
-          </div>
+              <h1 className="font-display text-page font-semibold tracking-tight text-body">
+                {t(pane.title)}
+              </h1>
+              <ErrorBoundary
+                fallback={(message) => (
+                  <Note kind="error">
+                    <p className="font-medium">{t("error.boundary")}</p>
+                    <p className="mt-1 font-mono text-small opacity-80">{message}</p>
+                  </Note>
+                )}
+              >
+                {pane.id === "library" ? <Library /> : null}
+                {pane.id === "download" ? <Download /> : null}
+                {pane.id === "downloads" ? <Downloads /> : null}
+                {pane.id === "settings" ? <Settings /> : null}
+              </ErrorBoundary>
+            </div>
+          ))}
         </main>
       </div>
+
+      {/* On the Download tab the rail already shows it. */}
+      <FloatingDownload hidden={tab === "download"} />
     </div>
   );
 }
@@ -130,8 +150,7 @@ export function App() {
 /*
  * The mark is drawn in near-black ink, so it needs a variant per theme rather
  * than a filter: the light one is the artwork as drawn, the dark one has its
- * ink remapped to the body colour. Both are exported at three times the height
- * they render at, so they stay sharp on a HiDPI screen.
+ * ink remapped to the body colour.
  */
 function Wordmark() {
   const t = useT();
@@ -147,13 +166,10 @@ function Wordmark() {
 }
 
 /*
- * A physical switch rather than a button that swaps its icon.
- *
- * The knob carries the theme that is currently on and slides to the side that
- * theme lives on - left for light, right for dark - so the control shows its
- * state at rest instead of only announcing what a click would do. Both faces
- * are rendered and cross-faded, because swapping the icon at the end of the
- * travel reads as a glitch rather than as the same object turning over.
+ * A physical switch rather than a button that swaps its icon. The knob carries
+ * the theme that is currently on and slides to the side that theme lives on, so
+ * the control shows its state at rest instead of only announcing what a click
+ * would do.
  */
 function ThemeSwitch() {
   const t = useT();
@@ -177,7 +193,10 @@ function ThemeSwitch() {
       >
         <Icon
           name="sun"
-          className={"absolute size-3 transition-opacity duration-200 " + (dark ? "opacity-0" : "opacity-100 text-amber-text")}
+          className={
+            "absolute size-3 transition-opacity duration-200 " +
+            (dark ? "opacity-0" : "text-amber-text opacity-100")
+          }
         />
         <Icon
           name="moon"

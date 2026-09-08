@@ -36,11 +36,21 @@ export function parseTimecode(text: string): number | null {
   return total;
 }
 
+/*
+ * A size in whatever unit keeps it readable.
+ *
+ * This used to bottom out at megabytes, which was fine for a 14 GB download and
+ * wrong for the number beside it: a connection running at 600 KB/s was rounded
+ * to "0 MB/s" and looked broken, on exactly the slow connections where the
+ * reading matters most. Kilobytes are now the floor.
+ */
 export function bytes(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "0 MB";
+  if (!Number.isFinite(n) || n <= 0) return "0 KB";
   const gb = n / 1024 ** 3;
   if (gb >= 1) return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
-  return `${Math.round(n / 1024 ** 2)} MB`;
+  const mb = n / 1024 ** 2;
+  if (mb >= 1) return `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
 /** Kick sends `2026-09-06 00:14:58` (UTC, no zone marker) on some fields. */

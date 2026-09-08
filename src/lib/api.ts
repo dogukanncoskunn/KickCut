@@ -81,6 +81,13 @@ export type FfmpegProgress = {
   total: number;
 };
 
+/** A segment that never downloaded, and where it falls in the broadcast. */
+export type FailedSegment = {
+  index: number;
+  startSeconds: number;
+  endSeconds: number;
+};
+
 export type JobState = "queued" | "downloading" | "paused" | "muxing" | "done" | "failed";
 
 /** How the segments become an MP4. See src-tauri/src/mux.rs for the reasoning. */
@@ -103,6 +110,7 @@ export type JobProgress = {
   muxMode: MuxMode;
   frameRate: number;
   outputPath: string | null;
+  failedSegments: FailedSegment[];
   state: JobState;
   createdAt: number;
   error: string | null;
@@ -142,6 +150,10 @@ export const api = {
   /** Bytes per second; 0 removes the cap. Applies to a running download. */
   setSpeedLimit: (bytesPerSecond: number) =>
     invoke<void>("set_speed_limit", { bytesPerSecond }),
+  /** Whether a job that came up short puts itself back in the queue. */
+  setAutoResume: (enabled: boolean) => invoke<void>("set_auto_resume", { enabled }),
+  /** Show a file in Explorer, selected - or open a folder. */
+  reveal: (path: string) => invoke<void>("reveal", { path }),
   ffmpegStatus: () => invoke<FfmpegStatus>("ffmpeg_status"),
   installFfmpeg: () => invoke<FfmpegStatus>("install_ffmpeg"),
   renditions: (masterUrl: string) => invoke<Rendition[]>("renditions", { masterUrl }),

@@ -10,7 +10,6 @@ mod rate;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         .manage(hls::PlaylistCache::default())
         .manage(download::Downloads::default())
         .invoke_handler(tauri::generate_handler![
@@ -25,6 +24,8 @@ pub fn run() {
             download::resume_job,
             download::cancel_job,
             download::set_speed_limit,
+            download::set_auto_resume,
+            download::reveal,
         ])
         .run(tauri::generate_context!())
         .expect("KickCut could not start");
