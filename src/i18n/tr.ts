@@ -10,6 +10,8 @@ export const tr: Messages = {
   "empty.downloads": "Tamamlanan indirmeler burada görünür.",
   "downloads.completed": "{when} tamamlandı",
   "downloads.forget": "Listeden kaldır",
+  "downloads.delete": "Dosyayı sil",
+  "downloads.delete.confirm": "İndirilen video diskten silinsin mi? Bu geri alınamaz.",
   "downloads.forget.confirm": "Bu kayıt listeden kaldırılsın mı? Video dosyası yerinde kalır.",
   "downloads.missing.title": "{count} segment indirilemedi",
   "downloads.missing.row": "Segment {index} · {from} – {to}",

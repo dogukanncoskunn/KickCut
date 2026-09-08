@@ -146,7 +146,13 @@ export const api = {
   enqueueJob: (job: NewJob) => invoke<string>("enqueue_job", { job }),
   pauseJob: (id: string) => invoke<void>("pause_job", { id }),
   resumeJob: (id: string) => invoke<void>("resume_job", { id }),
-  cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
+  /**
+   * Remove a job. `deleteOutput` also deletes the finished video, which is why
+   * the two callers pass different values - forgetting a line in a list is not
+   * the same act as destroying a recording.
+   */
+  cancelJob: (id: string, deleteOutput: boolean) =>
+    invoke<void>("cancel_job", { id, deleteOutput }),
   /** Bytes per second; 0 removes the cap. Applies to a running download. */
   setSpeedLimit: (bytesPerSecond: number) =>
     invoke<void>("set_speed_limit", { bytesPerSecond }),

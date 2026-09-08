@@ -18,7 +18,7 @@ type Value = {
   error: string | null;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
-  cancel: (id: string) => Promise<void>;
+  cancel: (id: string, deleteOutput: boolean) => Promise<void>;
 };
 
 const Ctx = createContext<Value | null>(null);
@@ -38,14 +38,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Value>(() => {
-    const act = (fn: (id: string) => Promise<void>) => async (id: string) => {
-      try {
-        await fn(id);
-        setError(null);
-      } catch (err) {
-        setError(cleanError(err));
-      }
-    };
+    const act =
+      <A extends unknown[]>(fn: (...args: A) => Promise<void>) =>
+      async (...args: A) => {
+        try {
+          await fn(...args);
+          setError(null);
+        } catch (err) {
+          setError(cleanError(err));
+        }
+      };
     return {
       jobs,
       error,

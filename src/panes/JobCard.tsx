@@ -2,7 +2,7 @@ import { useT } from "../i18n";
 import { api } from "../lib/api";
 import type { JobProgress, JobState } from "../lib/api";
 import { bytes, timecode } from "../lib/format";
-import { Badge, Button, Card, Note, ProgressBar } from "../lib/ui";
+import { Badge, Button, Card, Icon, Note, ProgressBar } from "../lib/ui";
 
 /* A job's state decides its accent, so a list is scannable at a glance. */
 const TONE: Record<JobState, "ok" | "warn" | "error" | "neutral"> = {
@@ -30,12 +30,15 @@ export function JobCard({
   onPause,
   onResume,
   onRemove,
+  onForget,
   compact = false,
 }: {
   job: JobProgress;
   onPause?: (id: string) => void;
   onResume?: (id: string) => void;
   onRemove?: (id: string) => void;
+  /** Drops the record and leaves the file alone. */
+  onForget?: (id: string) => void;
   compact?: boolean;
 }) {
   const t = useT();
@@ -149,6 +152,23 @@ export function JobCard({
           <Button kind="danger" size="small" icon="close" onClick={() => onRemove(job.id)}>
             {t("queue.remove")}
           </Button>
+        ) : null}
+
+        {/*
+          Icon only, and last. It is the harmless one of the two - the row goes
+          away, the recording stays - so it should not compete for attention
+          with the button that deletes a file.
+        */}
+        {onForget ? (
+          <button
+            type="button"
+            onClick={() => onForget(job.id)}
+            title={t("downloads.forget")}
+            aria-label={t("downloads.forget")}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-rose/10 hover:text-rose-text"
+          >
+            <Icon name="trash" className="size-4" />
+          </button>
         ) : null}
       </div>
     </Card>

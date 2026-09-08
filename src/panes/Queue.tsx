@@ -30,7 +30,7 @@ export function Queue() {
           // asks first. In the Downloads list the same button only forgets a
           // record, and says so.
           onRemove={(id) => {
-            if (window.confirm(t("queue.remove.confirm"))) cancel(id);
+            if (window.confirm(t("queue.remove.confirm"))) cancel(id, true);
           }}
         />
       ))}

@@ -10,6 +10,8 @@ export const de: Messages = {
   "empty.downloads": "Abgeschlossene Downloads erscheinen hier.",
   "downloads.completed": "Abgeschlossen {when}",
   "downloads.forget": "Aus Liste entfernen",
+  "downloads.delete": "Datei löschen",
+  "downloads.delete.confirm": "Das geladene Video von der Festplatte löschen? Das lässt sich nicht rückgängig machen.",
   "downloads.forget.confirm": "Diesen Eintrag entfernen? Die Videodatei bleibt erhalten.",
   "downloads.missing.title": "{count} Segment(e) konnten nicht geladen werden",
   "downloads.missing.row": "Segment {index} · {from} – {to}",

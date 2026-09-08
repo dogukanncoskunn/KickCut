@@ -36,6 +36,7 @@ const ICONS = {
   scissors:
     "M4 3l8 8.4M12 3 4 11.4M3.6 12.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8M12.4 12.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8",
   chevron: "M6 3.5 10.5 8 6 12.5",
+  trash: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2a.9.9 0 0 0 .9.8h4a.9.9 0 0 0 .9-.8l.6-8.2M6.8 7v4M9.2 7v4",
   sun: "M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6M8 1.6v1.4M8 13v1.4M14.4 8H13M3 8H1.6M12.5 3.5l-1 1M4.5 11.5l-1 1M12.5 12.5l-1-1M4.5 4.5l-1-1",
   moon: "M13 9.4A5.4 5.4 0 0 1 6.6 3a5.6 5.6 0 1 0 6.4 6.4",
 } as const;
@@ -140,9 +141,15 @@ const buttonClass: Record<ButtonKind, string> = {
   ghost: "text-muted hover:bg-raised hover:text-body",
 };
 
+/*
+ * The middle size is h-9 because that is what Input and Dropdown are. A button
+ * sitting beside a field is the common case here - search boxes, the folder
+ * picker - and an h-8 button next to an h-9 field reads as a mistake every
+ * time, so the default matches rather than needing a class at each call site.
+ */
 const buttonSize: Record<ButtonSize, string> = {
   small: "h-7 px-2.5 text-small",
-  mid: "h-8 px-3 text-body",
+  mid: "h-9 px-3 text-body",
   large: "h-10 px-5 text-mid font-semibold",
 };
 

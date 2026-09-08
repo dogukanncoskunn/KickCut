@@ -228,6 +228,22 @@ function Grip({
 /* -------------------------------------------------------------- timebox -- */
 
 /*
+ * Lay bare digits out as HH:MM:SS while they are typed.
+ *
+ * Typing "05" and then having to click into the minutes to carry on is the kind
+ * of small friction that makes a field feel broken. Here the separators appear
+ * on their own as the digits arrive, so a range is entered in one run of the
+ * number keys. Deleting works without a special case, because the display is
+ * always derived from the digits that are left.
+ */
+function maskTimecode(digits: string): string {
+  const d = digits.replace(/\D/g, "").slice(0, 6);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}:${d.slice(2)}`;
+  return `${d.slice(0, 2)}:${d.slice(2, 4)}:${d.slice(4)}`;
+}
+
+/*
  * Held as text while it is being typed. Parsing on every keystroke would fight
  * the user - "02:" is not a time yet - so the value is only pushed out on blur
  * or Enter, and rejected input stays on screen with the field marked instead of
@@ -254,7 +270,14 @@ function TimeBox({
     if (!editing) setText(fullTimecode(seconds));
   }, [seconds, editing]);
 
-  const parsed = parseTimecode(text);
+  /*
+   * A half-typed value is read as the start of a time, not the end of one:
+   * "05" is five hours, so the missing places are filled with zeros rather than
+   * shifting the digits down into minutes and seconds. That is what someone
+   * typing left to right means, and it is what the mask above shows them.
+   */
+  const padded = text.replace(/\D/g, "").padEnd(6, "0").slice(0, 6);
+  const parsed = text.trim() === "" ? null : parseTimecode(maskTimecode(padded));
   const bad = parsed === null || parsed > max;
 
   function commit() {
@@ -271,7 +294,7 @@ function TimeBox({
         inputMode="numeric"
         spellCheck={false}
         onFocus={() => setEditing(true)}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => setText(maskTimecode(e.target.value))}
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         className={"font-mono " + (bad ? "border-rose/60" : "")}

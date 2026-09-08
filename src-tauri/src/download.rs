@@ -979,9 +979,16 @@ pub async fn resume_job(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove a job and everything it downloaded.
+/// Remove a job.
+///
+/// `delete_output` separates the two things "remove" can mean. In the queue it
+/// is always true: the job has produced nothing but a folder of segments, and
+/// leaving those behind would be litter. In the finished list the record and
+/// the video are different objects - forgetting a line from a list should not
+/// delete somebody's recording - so the list offers both, and only the one that
+/// destroys a file asks first.
 #[tauri::command]
-pub async fn cancel_job(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn cancel_job(app: AppHandle, id: String, delete_output: bool) -> Result<(), String> {
     let state = app.state::<Downloads>();
     if let Ok(slot) = state.control.lock() {
         if let Some((running, control)) = slot.as_ref() {
@@ -990,11 +997,23 @@ pub async fn cancel_job(app: AppHandle, id: String) -> Result<(), String> {
             }
         }
     }
+    let output = state
+        .jobs
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.iter().find(|j| j.id == id).and_then(|j| j.output_path.clone()));
+
     if let Ok(mut jobs) = state.jobs.lock() {
         jobs.retain(|j| j.id != id);
     }
     let _ = tokio::fs::remove_file(jobs_dir(&app)?.join(format!("{id}.json"))).await;
     let _ = tokio::fs::remove_dir_all(parts_dir(&app, &id)?).await;
+
+    if delete_output {
+        if let Some(path) = output {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+    }
     emit_queue(&app);
     Ok(())
 }

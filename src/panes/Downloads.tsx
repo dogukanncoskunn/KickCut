@@ -45,8 +45,9 @@ export function Downloads() {
             job={job}
             onResume={resume}
             onRemove={(id) => {
-              if (window.confirm(t("downloads.forget.confirm"))) cancel(id);
+              if (window.confirm(t("downloads.delete.confirm"))) cancel(id, true);
             }}
+            onForget={(id) => cancel(id, false)}
           />
           <span className="px-1 font-mono text-mini text-muted">
             {t("downloads.completed", { when: when(job.createdAt) })}

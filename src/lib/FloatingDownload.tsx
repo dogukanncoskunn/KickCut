@@ -14,6 +14,11 @@ import { Icon } from "./ui";
  * over something someone wants to read.
  *
  * It is not rendered on the Download tab, where the rail already shows it.
+ *
+ * It sits bottom left by default because that corner is otherwise dead space -
+ * every pane's content hangs from the top - and because arriving there reads as
+ * docked rather than as something that slid in over what you were reading. It
+ * is still draggable; the position is remembered once it has been moved.
  */
 const POSITION_KEY = "kickcut.floating";
 const MARGIN = 12;
@@ -98,7 +103,7 @@ export function FloatingDownload({ hidden }: { hidden: boolean }) {
     <div
       ref={panel}
       className="fixed z-40 w-[22rem] max-w-[calc(100vw-1.5rem)]"
-      style={at ? { left: at.x, top: at.y } : { right: "1.5rem", bottom: "1.5rem" }}
+      style={at ? { left: at.x, top: at.y } : { left: "1rem", bottom: "2.25rem" }}
     >
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-2xl shadow-black/50">
         <div

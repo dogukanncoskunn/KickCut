@@ -56,65 +56,64 @@ export function App() {
   return (
     <div className="flex h-full flex-col bg-ink">
       {/*
-        Three tracks, not a row of flexed items: the outer two are equal, so the
-        tabs sit on the window's true centre no matter how wide the mark on the
-        left or the controls on the right happen to be. Flexing them would put
-        the group wherever the leftovers fell, and it would move every time the
-        language changed the width of a label.
+        Two strips, each with one job.
+
+        The upper one is the app's identity and the two preferences that belong
+        to the whole window. Navigation was crammed in beside them and read as
+        clutter on a title bar; it has its own line now, which also lets the
+        tabs sit on the same left margin as the content they switch, so the eye
+        follows one edge down the screen instead of two.
       */}
-      <header className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-line bg-surface px-4">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-4 border-b border-line/60 bg-surface px-6">
         <Wordmark />
-
-        <nav className="flex items-center gap-1">
-          {TABS.map((x) => {
-            const on = x.id === tab;
-            return (
-              <button
-                key={x.id}
-                type="button"
-                onClick={() => setTab(x.id)}
-                aria-current={on ? "page" : undefined}
-                className={
-                  "group relative flex h-8 shrink-0 items-center gap-2 rounded-md px-3.5 text-body transition-colors " +
-                  (on
-                    ? "bg-raised font-medium text-body"
-                    : "text-muted hover:bg-raised/50 hover:text-body")
-                }
-              >
-                <Icon
-                  name={x.icon}
-                  className={
-                    "size-4 shrink-0 transition-colors " +
-                    (on ? "text-kick-text" : "text-current group-hover:text-body")
-                  }
-                />
-                <span>{t(x.label)}</span>
-                {/*
-                  A hairline on the header's own bottom edge. The pill says
-                  which tab the pointer is near; this says which screen you are
-                  actually on, and reads from across the room.
-                */}
-                <span
-                  className={
-                    "absolute inset-x-2 -bottom-2 h-0.5 rounded-full bg-kick transition-opacity duration-200 " +
-                    (on ? "opacity-100" : "opacity-0")
-                  }
-                />
-              </button>
-            );
-          })}
-        </nav>
-
         {/*
           Language sits here rather than in Settings. It is the one preference
           someone may need on any screen - most often because the screen they
           are looking at is in the wrong language.
         */}
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center gap-1.5">
           <LanguagePicker />
           <ThemeSwitch />
         </div>
       </header>
+
+      <nav className="flex h-10 shrink-0 items-stretch gap-1 border-b border-line bg-surface px-6">
+        {TABS.map((x) => {
+          const on = x.id === tab;
+          return (
+            <button
+              key={x.id}
+              type="button"
+              onClick={() => setTab(x.id)}
+              aria-current={on ? "page" : undefined}
+              className={
+                "group relative flex shrink-0 items-center gap-2 px-3 text-body transition-colors " +
+                (on ? "font-medium text-body" : "text-muted hover:text-body")
+              }
+            >
+              <Icon
+                name={x.icon}
+                className={
+                  "size-4 shrink-0 transition-colors " +
+                  (on ? "text-kick-text" : "text-current group-hover:text-body")
+                }
+              />
+              <span>{t(x.label)}</span>
+              {/*
+                Sitting on the strip's own bottom border rather than floating
+                above it, so the active tab reads as joined to the screen below
+                instead of underlined.
+              */}
+              <span
+                className={
+                  "absolute inset-x-0 -bottom-px h-0.5 bg-kick transition-opacity duration-200 " +
+                  (on ? "opacity-100" : "opacity-0")
+                }
+              />
+            </button>
+          );
+        })}
+      </nav>
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         {/*

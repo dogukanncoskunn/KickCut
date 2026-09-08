@@ -13,6 +13,8 @@ export const en = {
   "empty.downloads": "Finished downloads appear here.",
   "downloads.completed": "Completed {when}",
   "downloads.forget": "Remove from list",
+  "downloads.delete": "Delete file",
+  "downloads.delete.confirm": "Delete the downloaded video from disk? This cannot be undone.",
   "downloads.forget.confirm": "Remove this from the list? The video file stays where it is.",
   "downloads.missing.title": "{count} segment(s) could not be downloaded",
   "downloads.missing.row": "Segment {index} · {from} – {to}",

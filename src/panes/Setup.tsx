@@ -86,16 +86,22 @@ export function Setup() {
   useEffect(() => {
     if (!playlistUrl) return;
     let live = true;
-    setSummary(null);
-    setPlan(null);
     api
       .playlistSummary(playlistUrl)
       .then((s) => {
         if (!live) return;
         setSummary(s);
-        // Whole broadcast is the sensible default, and the toggle below reads
-        // as on until the user narrows it.
-        setRange({ start: 0, end: s.totalSeconds });
+        /*
+         * Only when there is nothing to keep.
+         *
+         * Every rendition of a broadcast is the same recording at a different
+         * bitrate, so the timeline a user has already picked out is still
+         * exactly as valid after switching quality. Resetting it - which is
+         * what this used to do, along with blanking the summary and making the
+         * picker vanish and reappear - threw away a range someone may have
+         * spent a minute getting right, for no reason at all.
+         */
+        setRange((current) => current ?? { start: 0, end: s.totalSeconds });
       })
       .catch((err) => live && setError(cleanError(err)));
     return () => {
@@ -183,12 +189,12 @@ export function Setup() {
         rather than a section of its own - the height it used to take was height
         the choices below had to scroll for.
       */}
-      <Card className="flex items-center gap-4 p-3">
+      <Card className="flex items-center gap-4 p-4">
         {vod.thumbnail ? (
-          <img src={vod.thumbnail} alt="" className="h-12 w-[5.3rem] shrink-0 rounded object-cover" />
+          <img src={vod.thumbnail} alt="" className="h-[4.5rem] w-32 shrink-0 rounded object-cover" />
         ) : null}
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h3 className="truncate text-body font-semibold text-body" title={vod.title}>
+        <div className="flex min-w-0 flex-col gap-1">
+          <h3 className="truncate text-mid font-semibold text-body" title={vod.title}>
             {vod.title}
           </h3>
           <p className="truncate font-mono text-small text-muted">
