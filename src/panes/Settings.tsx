@@ -15,16 +15,18 @@ import { Badge, Button, Card, Note, ProgressBar, Spinner, Toggle } from "../lib/
  * now a card that carries its own title, and they sit on one uniform grid: same
  * width, and the same height because grid rows stretch. Nothing is allowed to
  * be a different shape from its neighbours.
+ *
+ * The column count steps 1 -> 2 -> 4 and deliberately skips 3. Letting the
+ * grid fit as many as would go stranded the fourth card alone on a second row,
+ * which is the one arrangement of four things that reads as a mistake. Four
+ * across or two by two are both square; three and a spare is not.
  */
 export function Settings() {
   const t = useT();
   const { motion, setMotion } = useMotion();
 
   return (
-    <div
-      className="grid items-stretch gap-5"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(20rem, 1fr))" }}
-    >
+    <div className="grid items-stretch gap-5 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
       <SettingCard title={t("ffmpeg.title")} hint={t("ffmpeg.hint")}>
         <FfmpegSetting />
       </SettingCard>

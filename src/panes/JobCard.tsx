@@ -122,7 +122,7 @@ export function JobCard({
         </Note>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {running || job.state === "queued" ? (
           <Button size="small" icon="pause" onClick={() => onPause?.(job.id)}>
             {t("queue.pause")}
@@ -155,9 +155,13 @@ export function JobCard({
         ) : null}
 
         {/*
-          Icon only, and last. It is the harmless one of the two - the row goes
-          away, the recording stays - so it should not compete for attention
-          with the button that deletes a file.
+          Pushed to the far corner, away from the rest.
+
+          It sat next to "remove" in the same red, and the two read as one pair
+          of buttons for one action - which they are not: this one drops the
+          row and leaves the recording alone, the other deletes the file. The
+          gap is what tells them apart. Narrower than the labelled buttons but
+          the same height, so the row still lines up along one baseline.
         */}
         {onForget ? (
           <button
@@ -165,7 +169,7 @@ export function JobCard({
             onClick={() => onForget(job.id)}
             title={t("downloads.forget")}
             aria-label={t("downloads.forget")}
-            className="grid size-9 shrink-0 place-items-center rounded-md text-rose-text transition-colors hover:bg-rose/15"
+            className="ml-auto grid h-7 w-8 shrink-0 place-items-center rounded-md text-rose-text transition-colors hover:bg-rose/15"
           >
             <Icon name="trash" className="size-[1.15rem]" />
           </button>
