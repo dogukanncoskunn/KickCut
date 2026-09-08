@@ -22,6 +22,7 @@ import {
   Toggle,
 } from "../lib/ui";
 import { useQueue } from "../lib/Queue";
+import { SpeedControl } from "../lib/SpeedControl";
 import { isActive, JobCard } from "./JobCard";
 import { RangePicker } from "./RangePicker";
 import type { Range } from "./RangePicker";
@@ -188,6 +189,7 @@ export function Setup() {
       <div className="flex flex-col gap-5">
         <EmptyState icon="scissors">{t("empty.setup")}</EmptyState>
         <RunningDownloads />
+        <SpeedLimitBox />
       </div>
     );
   }
@@ -312,6 +314,7 @@ export function Setup() {
       ) : null}
 
       <RunningDownloads />
+      <SpeedLimitBox />
         </div>
 
         {/* What the choices on the left add up to, and the button that acts. */}
@@ -458,6 +461,26 @@ function RunningDownloads() {
           ))}
         </div>
       )}
+    </Section>
+  );
+}
+
+/*
+ * The speed cap, within reach of the download it applies to.
+ *
+ * It lives in Settings too, and both are the same control over the same value -
+ * one context, pushed straight to Rust - so neither can show a cap the other
+ * disagrees with. The reason for the second copy is when it gets used: the
+ * moment somebody notices a download eating the connection is the moment they
+ * are watching it here, and Settings is two tabs away from that.
+ */
+function SpeedLimitBox() {
+  const t = useT();
+  return (
+    <Section title={t("speed.label")} hint={t("speed.hint")}>
+      <Card className="p-5">
+        <SpeedControl />
+      </Card>
     </Section>
   );
 }
