@@ -157,8 +157,8 @@ export function App() {
         {t("app.madeBy")}
       </span>
 
-      {/* One home for the running download, on every screen. */}
-      <FloatingDownload />
+      {/* The queue follows you everywhere except the screen that already has it. */}
+      <FloatingDownload enabled={tab !== "download"} />
       <UpdateNotice />
     </div>
   );

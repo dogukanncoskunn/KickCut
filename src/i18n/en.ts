@@ -14,7 +14,10 @@ export const en = {
   "downloads.completed": "Completed {when}",
   "downloads.forget": "Remove from list",
   "downloads.delete": "Delete file",
-  "downloads.delete.confirm": "Delete the downloaded video from disk? This cannot be undone.",
+  "downloads.delete.confirm":
+    "The video file will be deleted from your computer. Are you sure? This cannot be undone.",
+  "downloads.delete.ok": "Delete the file",
+  "action.cancel": "Cancel",
   "downloads.forget.confirm": "Remove this from the list? The video file stays where it is.",
   "downloads.missing.title": "{count} segment(s) could not be downloaded",
   "downloads.missing.row": "Segment {index} · {from} – {to}",
@@ -98,6 +101,7 @@ export const en = {
   "setup.output.choose": "Choose…",
   "setup.output.name": "File name",
   "setup.start": "Add to queue",
+  "setup.queue": "Downloads",
   "setup.queued": "Added to the queue.",
   "queue.state.queued": "Waiting",
   "queue.state.downloading": "Downloading",
@@ -138,7 +142,7 @@ export const en = {
   "error.boundary": "This screen crashed. Switching tabs resets it.",
 
   "empty.library": "Type a channel name above to list its past broadcasts.",
-  "empty.setup": "Pick a broadcast in Library first.",
+  "empty.setup": "Pick a broadcast on the Broadcasts tab first.",
   "empty.queue": "No downloads yet.",
 } as const;
 

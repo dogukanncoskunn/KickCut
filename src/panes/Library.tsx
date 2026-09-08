@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocale, useT } from "../i18n";
 import type { Vod } from "../lib/api";
@@ -15,6 +15,17 @@ import type { IconName } from "../lib/ui";
  * channel box cannot, because Kick's videos endpoint is not paginated and only
  * returns the most recent broadcasts.
  */
+
+/*
+ * How often a listed channel is asked again.
+ *
+ * Kick publishes a broadcast as a VOD a little after the stream ends, so a list
+ * fetched while someone was still live goes stale the moment they stop. Waiting
+ * for that used to mean clearing the box and searching again to find out
+ * whether it had landed yet. A minute is well inside the delay Kick itself
+ * takes, and the request is one small JSON document.
+ */
+const REFRESH_MS = 60_000;
 export function Library() {
   const t = useT();
   const { locale } = useLocale();
@@ -25,6 +36,9 @@ export function Library() {
   const [busy, setBusy] = useState<null | "channel" | "link">(null);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<{ channel: string; vods: Vod[] } | null>(null);
+  // The slug the list on screen came from, so a refresh re-asks the same
+  // question. A pasted link has nothing to re-ask, so it clears this.
+  const [watching, setWatching] = useState<string | null>(null);
 
   async function listChannel(e: FormEvent) {
     e.preventDefault();
@@ -34,13 +48,54 @@ export function Library() {
     try {
       const vods = await channelVods(channel);
       setResults({ channel: vods[0]?.channel || channel.trim(), vods });
+      setWatching(channel.trim());
     } catch (err) {
       setError(cleanError(err));
       setResults(null);
+      setWatching(null);
     } finally {
       setBusy(null);
     }
   }
+
+  /*
+   * Keep the listed channel current on its own.
+   *
+   * The list is replaced only when the answer actually differs, so a refresh
+   * that finds nothing new causes no re-render and cannot disturb a selection
+   * or the scroll position. A failed refresh is swallowed: it is a background
+   * courtesy, and putting an error on screen over a list the user is reading -
+   * for a request they did not make - would be worse than being a minute out
+   * of date.
+   */
+  const refresh = useCallback(async () => {
+    if (!watching || document.hidden) return;
+    try {
+      const vods = await channelVods(watching);
+      setResults((current) => {
+        if (!current) return current;
+        const unchanged =
+          current.vods.length === vods.length &&
+          current.vods.every((v, i) => v.uuid === vods[i].uuid);
+        return unchanged ? current : { channel: vods[0]?.channel || current.channel, vods };
+      });
+    } catch {
+      /* stale for another minute is better than an error nobody asked for */
+    }
+  }, [watching]);
+
+  useEffect(() => {
+    if (!watching) return;
+    const timer = window.setInterval(() => void refresh(), REFRESH_MS);
+    // Coming back to the window is the moment someone is most likely to be
+    // checking whether the broadcast has landed, so it is worth an extra ask.
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [watching, refresh]);
 
   async function openLink(e: FormEvent) {
     e.preventDefault();
@@ -50,6 +105,7 @@ export function Library() {
     try {
       const one = await resolveVod(link);
       setResults({ channel: one.channel, vods: [one] });
+      setWatching(null);
       select(one);
     } catch (err) {
       setError(cleanError(err));

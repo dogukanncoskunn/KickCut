@@ -11,7 +11,10 @@ export const tr: Messages = {
   "downloads.completed": "{when} tamamlandı",
   "downloads.forget": "Listeden kaldır",
   "downloads.delete": "Dosyayı sil",
-  "downloads.delete.confirm": "İndirilen video diskten silinsin mi? Bu geri alınamaz.",
+  "downloads.delete.confirm":
+    "Video dosyası bilgisayarınızdan silinecek. Emin misiniz? Bu işlem geri alınamaz.",
+  "downloads.delete.ok": "Dosyayı sil",
+  "action.cancel": "Vazgeç",
   "downloads.forget.confirm": "Bu kayıt listeden kaldırılsın mı? Video dosyası yerinde kalır.",
   "downloads.missing.title": "{count} segment indirilemedi",
   "downloads.missing.row": "Segment {index} · {from} – {to}",
@@ -95,6 +98,7 @@ export const tr: Messages = {
   "setup.output.choose": "Seç…",
   "setup.output.name": "Dosya adı",
   "setup.start": "Kuyruğa ekle",
+  "setup.queue": "İndirmeler",
   "setup.queued": "Kuyruğa eklendi.",
   "queue.state.queued": "Sırada",
   "queue.state.downloading": "İndiriliyor",
@@ -135,6 +139,6 @@ export const tr: Messages = {
   "error.boundary": "Bu ekran çöktü. Sekme değiştirince sıfırlanır.",
 
   "empty.library": "Yayın geçmişini listelemek için yukarıya bir kanal adı yaz.",
-  "empty.setup": "Önce Kitaplık'tan bir yayın seç.",
+  "empty.setup": "Önce Yayınlar sekmesinden bir yayın seç.",
   "empty.queue": "Henüz indirme yok.",
 };

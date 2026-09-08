@@ -11,7 +11,10 @@ export const de: Messages = {
   "downloads.completed": "Abgeschlossen {when}",
   "downloads.forget": "Aus Liste entfernen",
   "downloads.delete": "Datei löschen",
-  "downloads.delete.confirm": "Das geladene Video von der Festplatte löschen? Das lässt sich nicht rückgängig machen.",
+  "downloads.delete.confirm":
+    "Die Videodatei wird von Ihrem Computer gelöscht. Sind Sie sicher? Das lässt sich nicht rückgängig machen.",
+  "downloads.delete.ok": "Datei löschen",
+  "action.cancel": "Abbrechen",
   "downloads.forget.confirm": "Diesen Eintrag entfernen? Die Videodatei bleibt erhalten.",
   "downloads.missing.title": "{count} Segment(e) konnten nicht geladen werden",
   "downloads.missing.row": "Segment {index} · {from} – {to}",
@@ -95,6 +98,7 @@ export const de: Messages = {
   "setup.output.choose": "Wählen…",
   "setup.output.name": "Dateiname",
   "setup.start": "Zur Warteschlange",
+  "setup.queue": "Downloads",
   "setup.queued": "Zur Warteschlange hinzugefügt.",
   "queue.state.queued": "Wartet",
   "queue.state.downloading": "Wird geladen",
@@ -135,6 +139,6 @@ export const de: Messages = {
   "error.boundary": "Diese Ansicht ist abgestürzt. Ein Tab-Wechsel setzt sie zurück.",
 
   "empty.library": "Gib oben einen Kanalnamen ein, um vergangene Streams zu listen.",
-  "empty.setup": "Wähle zuerst einen Stream in der Bibliothek.",
+  "empty.setup": "Wähle zuerst einen Stream im Tab Streams.",
   "empty.queue": "Noch keine Downloads.",
 };

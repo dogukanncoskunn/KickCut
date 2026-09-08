@@ -21,6 +21,8 @@ import {
   Spinner,
   Toggle,
 } from "../lib/ui";
+import { useQueue } from "../lib/Queue";
+import { isActive, JobCard } from "./JobCard";
 import { RangePicker } from "./RangePicker";
 import type { Range } from "./RangePicker";
 
@@ -178,7 +180,17 @@ export function Setup() {
     }
   }
 
-  if (!vod) return <EmptyState icon="scissors">{t("empty.setup")}</EmptyState>;
+  // No broadcast picked yet still leaves the downloads box on screen: it is
+  // part of this tab, not part of the form, and a running job has to stay
+  // reachable whether or not the next one has been set up.
+  if (!vod) {
+    return (
+      <div className="flex flex-col gap-5">
+        <EmptyState icon="scissors">{t("empty.setup")}</EmptyState>
+        <RunningDownloads />
+      </div>
+    );
+  }
 
   const whole = summary !== null && range !== null && range.start === 0 && range.end === summary.totalSeconds;
 
@@ -298,6 +310,8 @@ export function Setup() {
           )}
         </Section>
       ) : null}
+
+      <RunningDownloads />
         </div>
 
         {/* What the choices on the left add up to, and the button that acts. */}
@@ -413,6 +427,38 @@ export function Setup() {
         </div>
       </div>
     </div>
+  );
+}
+
+/*
+ * The running downloads, with a permanent place on this screen.
+ *
+ * This is where a download is started, so this is where it should appear -
+ * under its own heading, in a box that is part of the layout rather than a
+ * panel that materialises over the form the moment a job begins and shoves the
+ * page around. The box is here before there is anything in it and stays after
+ * the last job leaves, so the screen does not change shape while it is used.
+ *
+ * The floating panel still exists, but only once you have gone somewhere else:
+ * on this screen it would be a second copy of what is already on the page.
+ */
+function RunningDownloads() {
+  const t = useT();
+  const { jobs, pause, resume } = useQueue();
+  const running = jobs.filter(isActive);
+
+  return (
+    <Section title={t("setup.queue")}>
+      {running.length === 0 ? (
+        <EmptyState icon="download">{t("empty.queue")}</EmptyState>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {running.map((job) => (
+            <JobCard key={job.id} job={job} onPause={pause} onResume={resume} />
+          ))}
+        </div>
+      )}
+    </Section>
   );
 }
 

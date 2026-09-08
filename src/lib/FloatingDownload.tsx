@@ -28,7 +28,7 @@ const MARGIN = 12;
 
 type Point = { x: number; y: number };
 
-export function FloatingDownload() {
+export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
   const t = useT();
   const { jobs, pause, resume } = useQueue();
   const [collapsed, setCollapsed] = useState(false);
@@ -99,8 +99,10 @@ export function FloatingDownload() {
     return () => window.removeEventListener("resize", clamp);
   }, []);
 
+  // Nothing to follow you around on the screen that already shows the queue in
+  // full; there it would be a second copy of the same card.
   const job = jobs.find(isActive);
-  if (!job) return null;
+  if (!job || !enabled) return null;
 
   return (
     <div

@@ -1,3 +1,4 @@
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { useLocale, useT } from "../i18n";
 import { useQueue } from "../lib/Queue";
 import { EmptyState, Note } from "../lib/ui";
@@ -11,9 +12,13 @@ import { isActive, JobCard } from "./JobCard";
  * a record, and the thing worth reading on it is which minutes of the broadcast
  * never arrived.
  *
- * Removing from this list forgets the record. It does not touch the MP4, which
- * lives wherever the user chose to save it - so the confirmation says so,
- * unlike the one in the queue, where removing really does destroy work.
+ * Two different removals, and the difference is the file on disk. The trash
+ * icon forgets the record and leaves the MP4 alone; "remove" deletes the video
+ * itself, so it asks first and says plainly what is about to happen.
+ *
+ * The question has to come from the dialog plugin, not `window.confirm`. The
+ * webview swallows the built-in one - no dialog appears and it answers as if
+ * the user had cancelled - so the prompt was simply never reaching the screen.
  */
 export function Downloads() {
   const t = useT();
@@ -45,7 +50,14 @@ export function Downloads() {
             job={job}
             onResume={resume}
             onRemove={(id) => {
-              if (window.confirm(t("downloads.delete.confirm"))) cancel(id, true);
+              void confirm(t("downloads.delete.confirm"), {
+                title: t("downloads.delete"),
+                kind: "warning",
+                okLabel: t("downloads.delete.ok"),
+                cancelLabel: t("action.cancel"),
+              }).then((yes) => {
+                if (yes) void cancel(id, true);
+              });
             }}
             onForget={(id) => cancel(id, false)}
           />
