@@ -81,7 +81,9 @@ jobs:
           # here-string's closing "@ at column zero, and a YAML block scalar
           # ends at the first line that is not indented - so the two cannot
           # coexist, and trying it silently invalidates this whole file.
-          $fence = [char]0x60 * 3
+          # PowerShell repeats a *string*, not a char - [char] * [int] is not a
+          # defined operation - so the cast has to come first.
+          $fence = ([char]0x60).ToString() * 3
           $lines = @(
             ""
             "## Verifying your download"
