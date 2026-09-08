@@ -4,8 +4,8 @@ import type { Locale } from "./i18n";
 import { ErrorBoundary } from "./lib/ErrorBoundary";
 import { FloatingDownload } from "./lib/FloatingDownload";
 import { useSelection } from "./lib/Selection";
-import { UpdateNotice } from "./lib/Updater";
 import { useTheme } from "./lib/Theme";
+import { UpdateNotice } from "./lib/Updater";
 import { Dropdown, Icon, Note } from "./lib/ui";
 import type { IconName } from "./lib/ui";
 import { Library } from "./panes/Library";
@@ -24,19 +24,27 @@ import logoLight from "./assets/logo-light.png";
  */
 type TabId = "library" | "download" | "downloads" | "settings";
 
+/*
+ * Navigation is a row, not a column.
+ *
+ * A sidebar spent thirteen rem of every screen on four words, and the panes
+ * paid for it by growing downwards - a narrow column of content with wide empty
+ * margins either side and a scrollbar doing work the width should have done.
+ * In the header the tabs cost nothing horizontally and no extra height either,
+ * because the logo and the two controls were already on that row.
+ */
 const TABS: { id: TabId; icon: IconName; label: MessageKey; title: MessageKey; width: string }[] = [
-  { id: "library", icon: "library", label: "nav.library", title: "pane.library.title", width: "78rem" },
-  // Wider than the others because it carries the queue rail alongside the form.
-  { id: "download", icon: "scissors", label: "nav.download", title: "pane.setup.title", width: "88rem" },
-  { id: "downloads", icon: "download", label: "nav.downloads", title: "pane.downloads.title", width: "68rem" },
-  // Wide enough for three setting cards on one row.
-  { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "68rem" },
+  // The wide panes are capped only so text never runs edge to edge on a very
+  // wide monitor; below that they use whatever the window gives them.
+  { id: "library", icon: "library", label: "nav.library", title: "pane.library.title", width: "112rem" },
+  { id: "download", icon: "scissors", label: "nav.download", title: "pane.setup.title", width: "112rem" },
+  { id: "downloads", icon: "download", label: "nav.downloads", title: "pane.downloads.title", width: "84rem" },
+  { id: "settings", icon: "settings", label: "nav.settings", title: "pane.settings.title", width: "84rem" },
 ];
 
 export function App() {
   const t = useT();
   const [tab, setTab] = useState<TabId>("library");
-  const [navOpen, setNavOpen] = useState(true);
   const { vod } = useSelection();
 
   // Choosing a broadcast is the start of setting up a download, so it moves
@@ -47,32 +55,17 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col bg-ink">
-      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
-        <button
-          type="button"
-          onClick={() => setNavOpen((v) => !v)}
-          aria-label="Menu"
-          className="grid size-7 place-items-center rounded text-muted transition-colors hover:bg-raised hover:text-body"
-        >
-          <Icon name="queue" className="size-4" />
-        </button>
+      {/*
+        Three tracks, not a row of flexed items: the outer two are equal, so the
+        tabs sit on the window's true centre no matter how wide the mark on the
+        left or the controls on the right happen to be. Flexing them would put
+        the group wherever the leftovers fell, and it would move every time the
+        language changed the width of a label.
+      */}
+      <header className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-line bg-surface px-4">
         <Wordmark />
-        {/*
-          Language sits here rather than in Settings. It is the one preference
-          someone may need on any screen - most often because the screen they
-          are looking at is in the wrong language.
-        */}
-        <div className="ml-auto flex items-center gap-1.5">
-          <LanguagePicker />
-          <ThemeSwitch />
-        </div>
-      </header>
 
-      <div className="flex min-h-0 flex-1">
-        <nav
-          className="flex shrink-0 flex-col gap-1 border-r border-line bg-surface p-2 transition-[width] duration-200"
-          style={{ width: navOpen ? "13rem" : "3.25rem" }}
-        >
+        <nav className="flex items-center gap-1">
           {TABS.map((x) => {
             const on = x.id === tab;
             return (
@@ -80,67 +73,90 @@ export function App() {
                 key={x.id}
                 type="button"
                 onClick={() => setTab(x.id)}
-                title={navOpen ? undefined : t(x.label)}
+                aria-current={on ? "page" : undefined}
                 className={
-                  "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-body transition-colors " +
-                  (on ? "bg-raised font-medium text-body" : "text-muted hover:bg-raised/60 hover:text-body")
+                  "group relative flex h-8 shrink-0 items-center gap-2 rounded-md px-3.5 text-body transition-colors " +
+                  (on
+                    ? "bg-raised font-medium text-body"
+                    : "text-muted hover:bg-raised/50 hover:text-body")
                 }
               >
                 <Icon
                   name={x.icon}
-                  className={"size-4 shrink-0 " + (on ? "text-kick-text" : "text-current")}
+                  className={
+                    "size-4 shrink-0 transition-colors " +
+                    (on ? "text-kick-text" : "text-current group-hover:text-body")
+                  }
                 />
-                {navOpen ? <span className="truncate">{t(x.label)}</span> : null}
+                <span>{t(x.label)}</span>
+                {/*
+                  A hairline on the header's own bottom edge. The pill says
+                  which tab the pointer is near; this says which screen you are
+                  actually on, and reads from across the room.
+                */}
+                <span
+                  className={
+                    "absolute inset-x-2 -bottom-2 h-0.5 rounded-full bg-kick transition-opacity duration-200 " +
+                    (on ? "opacity-100" : "opacity-0")
+                  }
+                />
               </button>
             );
           })}
-
-          {navOpen ? (
-            <span className="mt-auto px-2.5 pb-1 font-mono text-mini text-body/70">
-              {t("app.madeBy")}
-            </span>
-          ) : null}
         </nav>
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          {/*
-            Every pane stays mounted and the inactive ones are hidden.
-            Unmounting them threw away their state, so switching tabs mid-setup
-            wiped the quality, the range and the folder you had just chosen -
-            and a channel you had searched for. Hiding costs one hidden subtree
-            and keeps all of it.
-          */}
-          {TABS.map((pane) => (
-            <div
-              key={pane.id}
-              className="mx-auto flex flex-col gap-6 px-8 py-7"
-              style={
-                pane.id === tab
-                  ? { maxWidth: pane.width }
-                  : // Hidden rather than unmounted, so its state survives.
-                    { display: "none" }
-              }
+        {/*
+          Language sits here rather than in Settings. It is the one preference
+          someone may need on any screen - most often because the screen they
+          are looking at is in the wrong language.
+        */}
+        <div className="flex items-center justify-end gap-1.5">
+          <LanguagePicker />
+          <ThemeSwitch />
+        </div>
+      </header>
+
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        {/*
+          Every pane stays mounted and the inactive ones are hidden. Unmounting
+          threw away their state, so switching tabs mid-setup wiped the quality,
+          the range and the folder you had just chosen - and a channel you had
+          searched for. Hiding costs one hidden subtree and keeps all of it.
+        */}
+        {TABS.map((pane) => (
+          <div
+            key={pane.id}
+            className="mx-auto flex flex-col gap-5 px-6 pt-5 pb-12"
+            style={pane.id === tab ? { maxWidth: pane.width } : { display: "none" }}
+          >
+            <h1 className="font-display text-page font-semibold tracking-tight text-body">
+              {t(pane.title)}
+            </h1>
+            <ErrorBoundary
+              fallback={(message) => (
+                <Note kind="error">
+                  <p className="font-medium">{t("error.boundary")}</p>
+                  <p className="mt-1 font-mono text-small opacity-80">{message}</p>
+                </Note>
+              )}
             >
-              <h1 className="font-display text-page font-semibold tracking-tight text-body">
-                {t(pane.title)}
-              </h1>
-              <ErrorBoundary
-                fallback={(message) => (
-                  <Note kind="error">
-                    <p className="font-medium">{t("error.boundary")}</p>
-                    <p className="mt-1 font-mono text-small opacity-80">{message}</p>
-                  </Note>
-                )}
-              >
-                {pane.id === "library" ? <Library /> : null}
-                {pane.id === "download" ? <Download /> : null}
-                {pane.id === "downloads" ? <Downloads /> : null}
-                {pane.id === "settings" ? <Settings /> : null}
-              </ErrorBoundary>
-            </div>
-          ))}
-        </main>
-      </div>
+              {pane.id === "library" ? <Library /> : null}
+              {pane.id === "download" ? <Download /> : null}
+              {pane.id === "downloads" ? <Downloads /> : null}
+              {pane.id === "settings" ? <Settings /> : null}
+            </ErrorBoundary>
+          </div>
+        ))}
+      </main>
+
+      {/*
+        Pinned to the window rather than placed in a pane, so it is a mark on
+        the app and not a line that scrolls away with whatever screen you are on.
+        Click-through, because nothing about it is interactive.
+      */}
+      <span className="pointer-events-none fixed bottom-2.5 left-4 z-30 font-mono text-mini text-body/45 select-none">
+        {t("app.madeBy")}
+      </span>
 
       {/* On the Download tab the rail already shows it. */}
       <FloatingDownload hidden={tab === "download"} />
@@ -161,7 +177,7 @@ function Wordmark() {
     <img
       src={theme === "light" ? logoLight : logoDark}
       alt={t("app.name")}
-      className="h-5 w-auto select-none"
+      className="h-5 w-auto shrink-0 select-none"
       draggable={false}
     />
   );
@@ -218,7 +234,7 @@ function LanguagePicker() {
       options={LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] }))}
       onChange={(next) => setLocale(next as Locale)}
       ariaLabel={t("settings.language")}
-      className="h-7 w-32 border-transparent bg-transparent text-small hover:border-line"
+      className="h-7 w-[6.5rem] border-transparent bg-transparent text-small hover:border-line"
     />
   );
 }

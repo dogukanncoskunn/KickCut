@@ -68,7 +68,7 @@ export function Library() {
       */}
       <div
         className="grid items-start gap-x-6 gap-y-5"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(24rem, 1fr))" }}
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(21rem, 1fr))" }}
       >
         <SearchRow
           label={t("library.channel.label")}

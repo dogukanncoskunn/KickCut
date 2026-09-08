@@ -111,10 +111,10 @@ export function Section({
  * breakpoints, because the root font size already moves with the viewport -
  * breakpoints layered on top of that would fight it.
  */
-export function Columns({ children, min = "22rem" }: { children: ReactNode; min?: string }) {
+export function Columns({ children, min = "19rem" }: { children: ReactNode; min?: string }) {
   return (
     <div
-      className="grid items-start gap-6"
+      className="grid items-start gap-5"
       style={{ gridTemplateColumns: "repeat(auto-fill, minmax(" + min + ", 1fr))" }}
     >
       {children}
@@ -261,7 +261,9 @@ export function Dropdown({
         aria-label={ariaLabel}
         onClick={() => setOpen((v) => !v)}
         className={
-          "flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-line bg-ink px-2.5 text-body text-body transition-colors hover:border-muted/30 " +
+          // No width here on purpose: a dropdown should be as wide as its
+          // caller says, not as wide as whatever box it lands in.
+          "flex h-9 cursor-pointer items-center justify-between gap-2 rounded-md border border-line bg-ink px-2.5 text-body text-body transition-colors hover:border-muted/30 " +
           className
         }
       >

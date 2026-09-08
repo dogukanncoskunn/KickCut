@@ -11,7 +11,6 @@ import {
   Badge,
   Button,
   Card,
-  Columns,
   EmptyState,
   Field,
   Input,
@@ -178,26 +177,40 @@ export function Setup() {
   const whole = summary !== null && range !== null && range.start === 0 && range.end === summary.totalSeconds;
 
   return (
-    <div className="flex flex-col gap-8">
-      <Section title={t("setup.vod")}>
-        <Card className="flex gap-4 p-4">
-          {vod.thumbnail ? (
-            <img src={vod.thumbnail} alt="" className="h-20 w-36 shrink-0 rounded object-cover" />
-          ) : null}
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <h3 className="truncate text-title font-semibold text-body" title={vod.title}>
-              {vod.title}
-            </h3>
-            <p className="font-mono text-small text-muted">
-              {vod.channel} · {shortDate(vod.startedAt, locale)} · {t("setup.length")}{" "}
-              {timecode((summary?.totalSeconds ?? vod.durationMs / 1000) || 0)}
-            </p>
-          </div>
-        </Card>
-      </Section>
+    <div className="flex flex-col gap-5">
+      {/*
+        The broadcast is context, not a decision, so it gets one slim strip
+        rather than a section of its own - the height it used to take was height
+        the choices below had to scroll for.
+      */}
+      <Card className="flex items-center gap-4 p-3">
+        {vod.thumbnail ? (
+          <img src={vod.thumbnail} alt="" className="h-12 w-[5.3rem] shrink-0 rounded object-cover" />
+        ) : null}
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h3 className="truncate text-body font-semibold text-body" title={vod.title}>
+            {vod.title}
+          </h3>
+          <p className="truncate font-mono text-small text-muted">
+            {vod.channel} · {shortDate(vod.startedAt, locale)} · {t("setup.length")}{" "}
+            {timecode((summary?.totalSeconds ?? vod.durationMs / 1000) || 0)}
+          </p>
+        </div>
+      </Card>
 
       {error ? <Note kind="error">{error}</Note> : null}
 
+      {/*
+        Two columns instead of one long stack.
+
+        Everything here used to be full width and stacked, so a screen with room
+        to spare on both sides still needed scrolling to reach the download
+        button. The timeline is the one control that genuinely wants width, so
+        it keeps the wide column; the choices that are just a list of options
+        read perfectly well in a narrow one beside it.
+      */}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(22rem,1fr)]">
+        <div className="flex min-w-0 flex-col gap-5">
       <Section title={t("setup.quality")}>
         {!renditions && !error ? (
           <Card className="flex items-center gap-3 p-4">
@@ -206,11 +219,12 @@ export function Setup() {
           </Card>
         ) : null}
         {renditions ? (
-          <Card className="max-w-md p-4">
+          <Card className="p-4">
             <Field label={t("setup.quality")}>
               <Dropdown
                 value={qualityName}
                 onChange={setQualityName}
+                className="w-full"
                 ariaLabel={t("setup.quality")}
                 options={renditions.map((r, i) => ({
                   value: r.name,
@@ -278,105 +292,120 @@ export function Setup() {
           )}
         </Section>
       ) : null}
+        </div>
 
-      {plan ? (
-        <Section title={t("setup.plan")}>
-          <div className="flex flex-col gap-3">
-            <Card className="flex flex-wrap items-end gap-x-10 gap-y-4 p-5">
-              <Figure label={t("setup.plan.output")} value={timecode(plan.outputSeconds)} />
-              <Figure label={t("setup.plan.size")} value={bytes(plan.estimatedBytes)} />
-              <Figure
-                label={t("setup.plan.segments", { count: plan.segmentCount })}
-                value={`${plan.startIndex}–${plan.endIndex}`}
-                quiet
-              />
-            </Card>
-            {plan.downloadSeconds - plan.outputSeconds > 1 ? (
-              <p className="text-small text-muted">
-                {t("setup.plan.trim", {
-                  extra: timecode(plan.downloadSeconds - plan.outputSeconds),
-                })}
-              </p>
-            ) : null}
-            {plan.crossesDiscontinuity ? (
-              <Note kind="warn">{t("setup.warn.discontinuity")}</Note>
-            ) : null}
-          </div>
-        </Section>
-      ) : null}
-
-      {plan ? (
-        <Section title={t("setup.mux")}>
-          <Columns min="24rem">
-            {(["copy", "reencode"] as const).map((mode) => (
-              <ModeCard
-                key={mode}
-                active={muxMode === mode}
-                suggested={plan.crossesDiscontinuity === (mode === "reencode")}
-                title={t(`setup.mux.${mode}`)}
-                hint={t(`setup.mux.${mode}.hint`)}
-                suggestedLabel={t("setup.mux.suggested")}
-                onPick={() => setMuxMode(mode)}
-              />
-            ))}
-          </Columns>
-        </Section>
-      ) : null}
-
-      {plan ? (
-        <Section title={t("setup.output")}>
-          <div className="flex flex-col gap-4">
-            <Card className="flex flex-wrap items-end gap-4 p-5">
-              <div className="flex min-w-[20rem] flex-1 flex-col gap-1.5">
-                <span className="text-small font-medium text-muted">{t("setup.output.folder")}</span>
-                <div className="flex gap-2">
-                  <Input
-                    value={outputDir}
-                    readOnly
-                    placeholder="…"
-                    className="min-w-0 flex-1 font-mono"
-                    title={outputDir}
+        {/* What the choices on the left add up to, and the button that acts. */}
+        <div className="flex min-w-0 flex-col gap-5">
+          {plan ? (
+            <Section title={t("setup.plan")}>
+              <div className="flex flex-col gap-3">
+                <Card className="flex flex-wrap items-end gap-x-8 gap-y-4 p-4">
+                  <Figure label={t("setup.plan.output")} value={timecode(plan.outputSeconds)} />
+                  <Figure label={t("setup.plan.size")} value={bytes(plan.estimatedBytes)} />
+                  <Figure
+                    label={t("setup.plan.segments", { count: plan.segmentCount })}
+                    value={`${plan.startIndex}–${plan.endIndex}`}
+                    quiet
                   />
-                  <Button icon="folder" onClick={() => void chooseFolder()}>
-                    {t("setup.output.choose")}
+                </Card>
+                {plan.downloadSeconds - plan.outputSeconds > 1 ? (
+                  <p className="text-small text-muted">
+                    {t("setup.plan.trim", {
+                      extra: timecode(plan.downloadSeconds - plan.outputSeconds),
+                    })}
+                  </p>
+                ) : null}
+                {plan.crossesDiscontinuity ? (
+                  <Note kind="warn">{t("setup.warn.discontinuity")}</Note>
+                ) : null}
+              </div>
+            </Section>
+          ) : null}
+
+          {plan ? (
+            <Section title={t("setup.mux")}>
+              {/* Stacked, not side by side: the column is narrow, and these are
+                  two paragraphs to read rather than two things to compare. */}
+              <div className="flex flex-col gap-3">
+                {(["copy", "reencode"] as const).map((mode) => (
+                  <ModeCard
+                    key={mode}
+                    active={muxMode === mode}
+                    suggested={plan.crossesDiscontinuity === (mode === "reencode")}
+                    title={t(`setup.mux.${mode}`)}
+                    hint={t(`setup.mux.${mode}.hint`)}
+                    suggestedLabel={t("setup.mux.suggested")}
+                    onPick={() => setMuxMode(mode)}
+                  />
+                ))}
+              </div>
+            </Section>
+          ) : null}
+
+          {plan ? (
+            <Section title={t("setup.output")}>
+              <div className="flex flex-col gap-3">
+                <Card className="flex flex-col gap-3 p-4">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-small font-medium text-muted">
+                      {t("setup.output.folder")}
+                    </span>
+                    <div className="flex gap-2">
+                      <Input
+                        value={outputDir}
+                        readOnly
+                        placeholder="…"
+                        className="min-w-0 flex-1 font-mono text-small"
+                        title={outputDir}
+                      />
+                      <Button icon="folder" onClick={() => void chooseFolder()}>
+                        {t("setup.output.choose")}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="file-name" className="text-small font-medium text-muted">
+                      {t("setup.output.name")}
+                    </label>
+                    <Input
+                      id="file-name"
+                      value={fileName}
+                      onChange={(e) => setFileName(e.target.value)}
+                      spellCheck={false}
+                    />
+                  </div>
+                </Card>
+
+                {/*
+                  ffmpeg has to exist before a job is queued, not after it
+                  finishes. Downloading for an hour and only then discovering
+                  there is nothing to mux with is the one failure this app must
+                  never produce.
+                */}
+                {!ffmpeg.ready && ffmpeg.status ? (
+                  <Note kind="warn">{t("ffmpeg.blocked")}</Note>
+                ) : null}
+
+                <div className="flex items-center gap-3">
+                  <Button
+                    kind="primary"
+                    size="large"
+                    icon="download"
+                    disabled={!outputDir || !fileName.trim() || !ffmpeg.ready}
+                    onClick={() => void addToQueue()}
+                    className="flex-1"
+                  >
+                    {t("setup.start")}
                   </Button>
                 </div>
+                {queued ? (
+                  <span className="appear text-body text-kick-text">{t("setup.queued")}</span>
+                ) : null}
               </div>
-              <div className="flex min-w-[16rem] flex-1 flex-col gap-1.5">
-                <label htmlFor="file-name" className="text-small font-medium text-muted">
-                  {t("setup.output.name")}
-                </label>
-                <Input
-                  id="file-name"
-                  value={fileName}
-                  onChange={(e) => setFileName(e.target.value)}
-                  spellCheck={false}
-                />
-              </div>
-            </Card>
-
-            {/*
-              ffmpeg has to exist before a job is queued, not after it finishes.
-              Downloading for an hour and only then discovering there is nothing
-              to mux with is the one failure this app must never produce.
-            */}
-            {!ffmpeg.ready && ffmpeg.status ? <Note kind="warn">{t("ffmpeg.blocked")}</Note> : null}
-
-            <div className="flex items-center gap-4">
-              <Button
-                kind="primary"
-                size="large"
-                icon="download"
-                disabled={!outputDir || !fileName.trim() || !ffmpeg.ready}
-                onClick={() => void addToQueue()}
-              >
-                {t("setup.start")}
-              </Button>
-              {queued ? <span className="appear text-body text-kick-text">{t("setup.queued")}</span> : null}
-            </div>
-          </div>
-        </Section>
-      ) : null}
+            </Section>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
