@@ -83,7 +83,7 @@ export const tr: Messages = {
   "setup.mux": "Birleştirme",
   "setup.mux.copy": "Hızlı (yeniden kodlama yok)",
   "setup.mux.copy.hint": "Dakikalar sürer, kalite kaybı yok. Kesim en yakın anahtar kareye düşer, yaklaşık iki saniye içinde.",
-  "setup.mux.reencode": "Kurguya uygun (yeniden kodlama)",
+  "setup.mux.reencode": "Yavaş (yeniden kodlama)",
   "setup.mux.reencode.hint": "Saatler sürer ve bir kuşak kalite kaybı olur. Kesim tam kareye düşer, yayındaki kopma tamamen erir.",
   "setup.mux.suggested": "Bu aralık için önerilen",
   "queue.state.muxing": "Birleştiriliyor",

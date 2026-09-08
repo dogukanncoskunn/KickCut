@@ -13,7 +13,10 @@ import { Icon } from "./ui";
  * scroll past it - and it is draggable because wherever it defaults to will be
  * over something someone wants to read.
  *
- * It is not rendered on the Download tab, where the rail already shows it.
+ * It is the only place the queue lives. It used to be a rail down the right of
+ * the Download screen as well, which meant the same job appeared in two
+ * different shapes depending on which tab you were on, and adding one shoved
+ * the form sideways to make room.
  *
  * It sits bottom left by default because that corner is otherwise dead space -
  * every pane's content hangs from the top - and because arriving there reads as
@@ -25,7 +28,7 @@ const MARGIN = 12;
 
 type Point = { x: number; y: number };
 
-export function FloatingDownload({ hidden }: { hidden: boolean }) {
+export function FloatingDownload() {
   const t = useT();
   const { jobs, pause, resume } = useQueue();
   const [collapsed, setCollapsed] = useState(false);
@@ -97,7 +100,7 @@ export function FloatingDownload({ hidden }: { hidden: boolean }) {
   }, []);
 
   const job = jobs.find(isActive);
-  if (hidden || !job) return null;
+  if (!job) return null;
 
   return (
     <div

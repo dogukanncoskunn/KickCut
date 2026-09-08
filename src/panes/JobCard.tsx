@@ -165,9 +165,9 @@ export function JobCard({
             onClick={() => onForget(job.id)}
             title={t("downloads.forget")}
             aria-label={t("downloads.forget")}
-            className="grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-rose/10 hover:text-rose-text"
+            className="grid size-9 shrink-0 place-items-center rounded-md text-rose-text transition-colors hover:bg-rose/15"
           >
-            <Icon name="trash" className="size-4" />
+            <Icon name="trash" className="size-[1.15rem]" />
           </button>
         ) : null}
       </div>

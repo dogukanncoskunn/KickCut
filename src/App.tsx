@@ -157,8 +157,8 @@ export function App() {
         {t("app.madeBy")}
       </span>
 
-      {/* On the Download tab the rail already shows it. */}
-      <FloatingDownload hidden={tab === "download"} />
+      {/* One home for the running download, on every screen. */}
+      <FloatingDownload />
       <UpdateNotice />
     </div>
   );

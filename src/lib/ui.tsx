@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 
@@ -194,9 +194,16 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 const controlClass =
   "h-9 w-full rounded-md border border-line bg-ink px-2.5 text-body text-body placeholder:text-muted/60 transition-colors hover:border-muted/30 focus:border-muted/50 disabled:opacity-45";
 
-export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...rest} className={controlClass + " " + className} />;
-}
+/*
+ * Forwards its ref, because a caller sometimes needs the element itself - the
+ * timecode field attaches a non-passive wheel listener, which React's onWheel
+ * cannot be.
+ */
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className = "", ...rest }, ref) {
+    return <input ref={ref} {...rest} className={controlClass + " " + className} />;
+  },
+);
 
 export type Option = { value: string; label: string };
 

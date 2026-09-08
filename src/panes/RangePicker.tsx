@@ -264,11 +264,52 @@ function TimeBox({
 }) {
   const [text, setText] = useState(() => fullTimecode(seconds));
   const [editing, setEditing] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
 
   // While the track is being dragged this field is an output, so it follows.
   useEffect(() => {
     if (!editing) setText(fullTimecode(seconds));
   }, [seconds, editing]);
+
+  /*
+   * The wheel nudges whichever part of the time it is over.
+   *
+   * Hovering the hours and scrolling moves the hours; the minutes, the minutes.
+   * Which group the pointer is on is worked out from the character it sits over
+   * - the value is monospace and always eight characters, so the advance width
+   * follows from the font size.
+   *
+   * Attached natively rather than through onWheel because React registers that
+   * one passively, and a passive listener cannot stop the page scrolling behind
+   * the cursor - which is the whole point of catching it here.
+   */
+  const commitSeconds = useRef(onCommit);
+  commitSeconds.current = onCommit;
+  const at = useRef({ seconds, max });
+  at.current = { seconds, max };
+
+  useEffect(() => {
+    const input = field.current;
+    if (!input) return;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const box = input.getBoundingClientRect();
+      const style = window.getComputedStyle(input);
+      // 0.6 em is the advance of the monospace faces this app ships with.
+      const charWidth = (parseFloat(style.fontSize) || 13) * 0.6;
+      const column = Math.floor(
+        (e.clientX - box.left - (parseFloat(style.paddingLeft) || 0)) / Math.max(1, charWidth),
+      );
+      const unit = column <= 1 ? 3600 : column <= 4 ? 60 : 1;
+      const step = e.deltaY < 0 ? unit : -unit;
+      const { seconds: current, max: ceiling } = at.current;
+      commitSeconds.current(Math.max(0, Math.min(ceiling, current + step)));
+    };
+
+    input.addEventListener("wheel", onWheel, { passive: false });
+    return () => input.removeEventListener("wheel", onWheel);
+  }, []);
 
   /*
    * A half-typed value is read as the start of a time, not the end of one:
@@ -290,6 +331,7 @@ function TimeBox({
     <label className="flex w-36 flex-col gap-1.5">
       <span className="text-small font-medium text-muted">{label}</span>
       <Input
+        ref={field}
         value={text}
         inputMode="numeric"
         spellCheck={false}

@@ -1,43 +1,15 @@
-import { useT } from "../i18n";
-import { SpeedControl } from "../lib/SpeedControl";
-import { useQueue } from "../lib/Queue";
 import { Setup } from "./Setup";
-import { Queue } from "./Queue";
 
 /*
- * Setting a download up and watching it run are one screen, not two.
+ * Just the form.
  *
- * They were separate tabs, which meant queueing a job moved the thing you had
- * just started out of sight, and pausing it meant navigating back to a
- * different screen. Now the queue is a rail beside the form: the job you just
- * added appears next to the settings that produced it, with its pause button
- * already in reach.
- *
- * The rail only exists when there is something in it, so an empty queue costs
- * the form no width at all.
+ * The queue used to be a rail down the right of this screen, which meant the
+ * running download lived in two different places depending on which tab you
+ * were on - a column here, a floating panel everywhere else. It is the docked
+ * panel in the bottom-left corner on every screen now, including this one, so
+ * there is one place to look for it and adding a job does not make a column
+ * appear and shove the form sideways.
  */
 export function Download() {
-  const t = useT();
-  const { jobs } = useQueue();
-
-  return (
-    <div className="flex flex-col items-start gap-8 lg:flex-row">
-      <div className="min-w-0 flex-1">
-        <Setup />
-      </div>
-
-      {jobs.length > 0 ? (
-        <aside className="w-full shrink-0 lg:sticky lg:top-0 lg:w-[24rem]">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-display text-mid font-semibold text-body">{t("queue.title")}</h2>
-              <SpeedControl compact />
-            </div>
-            <Queue />
-          </div>
-        </aside>
-      ) : null}
-    </div>
-  );
+  return <Setup />;
 }
-

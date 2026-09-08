@@ -83,7 +83,7 @@ export const de: Messages = {
   "setup.mux": "Zusammenfügen",
   "setup.mux.copy": "Schnell (ohne Neukodierung)",
   "setup.mux.copy.hint": "Dauert Minuten, ohne Qualitätsverlust. Schnitte landen auf dem nächsten Keyframe, etwa zwei Sekunden genau.",
-  "setup.mux.reencode": "Schnitttauglich (Neukodierung)",
+  "setup.mux.reencode": "Langsam (Neukodierung)",
   "setup.mux.reencode.hint": "Dauert Stunden und kostet eine Generation Qualität. Schnitte landen framegenau, Brüche im Stream verschwinden.",
   "setup.mux.suggested": "Für diesen Bereich empfohlen",
   "queue.state.muxing": "Wird zusammengefügt",

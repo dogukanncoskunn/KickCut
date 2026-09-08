@@ -86,7 +86,7 @@ export const en = {
   "setup.mux": "Assembling",
   "setup.mux.copy": "Fast (no re-encode)",
   "setup.mux.copy.hint": "Minutes, and no quality loss. Cuts land on the nearest keyframe, within about two seconds.",
-  "setup.mux.reencode": "Editing-safe (re-encode)",
+  "setup.mux.reencode": "Slow (re-encode)",
   "setup.mux.reencode.hint": "Hours, and one re-encode of quality. Cuts land on the exact frame and any break in the broadcast is dissolved.",
   "setup.mux.suggested": "Suggested for this range",
   "queue.state.muxing": "Assembling",
