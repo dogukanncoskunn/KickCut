@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useT } from "../i18n";
 import { isActive, JobCard } from "../panes/JobCard";
+import { api } from "./api";
 import { useConfirmedCancel, useQueue } from "./Queue";
 import { Icon } from "./ui";
 
@@ -33,6 +35,10 @@ export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
   const { jobs, pause, resume } = useQueue();
   const cancel = useConfirmedCancel();
   const [collapsed, setCollapsed] = useState(false);
+  // True while the panel is living in a window of its own. Two copies of the
+  // same card, one inside the app and one floating over everything else,
+  // would be the confusion this whole feature exists to remove.
+  const [detached, setDetached] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const grab = useRef<Point | null>(null);
 
@@ -82,6 +88,14 @@ export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
     };
   }, [onMove]);
 
+  useEffect(() => {
+    void api.miniOpen().then(setDetached).catch(() => {});
+    const stop = listen<boolean>("mini", (e) => setDetached(e.payload));
+    return () => {
+      void stop.then((off) => off());
+    };
+  }, []);
+
   // A window that shrank can leave a saved position off-screen.
   useEffect(() => {
     const clamp = () => {
@@ -103,7 +117,7 @@ export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
   // Nothing to follow you around on the screen that already shows the queue in
   // full; there it would be a second copy of the same card.
   const job = jobs.find(isActive);
-  if (!job || !enabled) return null;
+  if (!job || !enabled || detached) return null;
 
   return (
     <div
@@ -126,14 +140,36 @@ export function FloatingDownload({ enabled = true }: { enabled?: boolean }) {
             <span className="dot-running size-1.5 rounded-full bg-kick" />
             {t("queue.floating")}
           </span>
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-label={t("queue.floating")}
-            className="grid size-5 place-items-center rounded text-muted transition-colors hover:bg-surface hover:text-body"
-          >
-            <Icon name="chevron" className={"size-3.5 " + (collapsed ? "-rotate-90" : "rotate-90")} />
-          </button>
+          <span className="flex items-center gap-0.5">
+            {/*
+              Out of the app altogether. The panel can already be dragged
+              anywhere inside KickCut, which is no use at all when KickCut is
+              the window behind the one you are working in.
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                // Set here as well as on the event, because this side already
+                // knows: it is the one asking. The event is what brings the
+                // panel back when the window is closed from over there.
+                setDetached(true);
+                void api.openMini().catch(() => setDetached(false));
+              }}
+              title={t("queue.detach")}
+              aria-label={t("queue.detach")}
+              className="grid size-5 place-items-center rounded text-muted transition-colors hover:bg-surface hover:text-body"
+            >
+              <Icon name="detach" className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              aria-label={t("queue.floating")}
+              className="grid size-5 place-items-center rounded text-muted transition-colors hover:bg-surface hover:text-body"
+            >
+              <Icon name="chevron" className={"size-3.5 " + (collapsed ? "-rotate-90" : "rotate-90")} />
+            </button>
+          </span>
         </div>
 
         {!collapsed ? (

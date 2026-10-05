@@ -2,6 +2,7 @@ mod download;
 mod ffmpeg;
 mod hls;
 mod kick;
+mod mini;
 mod mux;
 mod rate;
 
@@ -28,6 +29,9 @@ pub fn run() {
             download::set_speed_limit,
             download::set_auto_resume,
             download::reveal,
+            mini::open_mini,
+            mini::close_mini,
+            mini::mini_open,
         ])
         .run(tauri::generate_context!())
         .expect("KickCut could not start");

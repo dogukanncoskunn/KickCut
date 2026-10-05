@@ -25,7 +25,16 @@ type Value = {
 
 const Ctx = createContext<Value | null>(null);
 
-export function QueueProvider({ children }: { children: ReactNode }) {
+export function QueueProvider({
+  children,
+  // The second window mirrors the same queue but must not ask Rust to read it
+  // back off disk: that is a one-time startup job, and the window that owns
+  // the app has already done it.
+  load = true,
+}: {
+  children: ReactNode;
+  load?: boolean;
+}) {
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +42,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     const stop = listen<JobProgress[]>("queue", (e) => setJobs(e.payload));
     // Jobs left over from a previous run are read back from disk; anything
     // that was mid-download returns as paused, ready to resume.
-    void api.loadJobs().catch((err) => setError(cleanError(err)));
+    if (load) void api.loadJobs().catch((err) => setError(cleanError(err)));
     return () => {
       void stop.then((off) => off());
     };
-  }, []);
+  }, [load]);
 
   const value = useMemo<Value>(() => {
     const act =

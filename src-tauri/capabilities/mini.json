@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mini",
+  "description": "The floating download window. It has no title bar, so it drags itself; cancelling asks the same question it does in the main window. Closing goes through the Rust command, which also tells the main window to show its own panel again.",
+  "windows": [
+    "mini"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:allow-confirm"
+  ]
+}

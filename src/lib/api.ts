@@ -160,6 +160,10 @@ export const api = {
   setAutoResume: (enabled: boolean) => invoke<void>("set_auto_resume", { enabled }),
   /** Show a file in Explorer, selected - or open a folder. */
   reveal: (path: string) => invoke<void>("reveal", { path }),
+  /** Put the download panel in a borderless window of its own. */
+  openMini: () => invoke<void>("open_mini"),
+  closeMini: () => invoke<void>("close_mini"),
+  miniOpen: () => invoke<boolean>("mini_open"),
   ffmpegStatus: () => invoke<FfmpegStatus>("ffmpeg_status"),
   installFfmpeg: () => invoke<FfmpegStatus>("install_ffmpeg"),
   renditions: (masterUrl: string) => invoke<Rendition[]>("renditions", { masterUrl }),
