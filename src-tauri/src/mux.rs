@@ -307,10 +307,26 @@ pub struct Verified {
     /// Frames divided by the video stream's own duration.
     ///
     /// Reported for diagnosis, not used as a pass mark. It sits below the
-    /// declared rate whenever the broadcast itself had gaps, which on Kick's
-    /// transcoded rungs is normal - see the note in `verify`.
+    /// rendition's rate whenever the broadcast itself had gaps, which on
+    /// Kick's transcoded rungs is normal - see the note in `verify`.
     pub implied_fps: f64,
+    /// `avg_frame_rate`, which is what the container records as the average.
+    ///
+    /// Deliberately not `r_frame_rate`. That field is the lowest rate at
+    /// which every timestamp in the stream can be written exactly, so a 60 fps
+    /// stream whose timestamps land on half-frame boundaries reports 120 - and
+    /// reading it as "the frame rate" is what used to fail every 1080p60
+    /// download here. See the note in `verify`.
     pub declared_fps: f64,
+}
+
+/// Whether the file holds so little picture that most of it must be missing.
+///
+/// Its own function so the rule that nearly threw away every 1080p60 download
+/// can be tested without an ffmpeg run; the cases it is pinned against are in
+/// the tests at the foot of this file.
+fn too_few_frames(implied_fps: f64, expected_fps: f64) -> bool {
+    expected_fps > 0.0 && implied_fps > 0.0 && implied_fps / expected_fps < 0.5
 }
 
 /// Check the output before telling anyone it is ready.
@@ -318,7 +334,14 @@ pub struct Verified {
 /// A zero-length file, or one that lost its audio track to a bad bitstream
 /// filter, exits ffmpeg with status 0. The only way to know the clip is real is
 /// to read it back.
-pub async fn verify(tools: &Tools, output: &Path, expected_seconds: f64) -> Result<Verified, String> {
+/// `expected_fps` is the rendition's own frame rate, off the master playlist;
+/// zero skips the frame-count check.
+pub async fn verify(
+    tools: &Tools,
+    output: &Path,
+    expected_seconds: f64,
+    expected_fps: f64,
+) -> Result<Verified, String> {
     let mut command = tokio::process::Command::new(&tools.ffprobe);
     command.args([
         "-v",
@@ -371,7 +394,14 @@ pub async fn verify(tools: &Tools, output: &Path, expected_seconds: f64) -> Resu
         has_video: kind("video"),
         has_audio: kind("audio"),
         implied_fps: if video_seconds > 0.0 { frames / video_seconds } else { 0.0 },
-        declared_fps: ratio(video.and_then(|v| v["r_frame_rate"].as_str())),
+        declared_fps: {
+            let avg = ratio(video.and_then(|v| v["avg_frame_rate"].as_str()));
+            if avg > 0.0 {
+                avg
+            } else {
+                ratio(video.and_then(|v| v["r_frame_rate"].as_str()))
+            }
+        },
     };
 
     if !result.has_video {
@@ -406,16 +436,23 @@ pub async fn verify(tools: &Tools, output: &Path, expected_seconds: f64) -> Resu
      * timestamp rewriting - and that is pinned by the tests below.
      *
      * The bound kept here is only for a file that is obviously not what was
-     * asked for; half the declared rate is far past any stall.
+     * asked for; half the rendition's rate is far past any stall.
+     *
+     * What it is measured against matters as much as the bound. This used to
+     * compare against ffprobe's `r_frame_rate`, which is not the frame rate:
+     * it is the lowest rate that can write every timestamp in the stream
+     * exactly, so a stream whose timestamps sit on half-frame boundaries
+     * reports double. A perfectly good 1080p60 minute - 3600 frames over
+     * 60.0027 s, measured 2026-10-05 - came back as 59.9973 against a
+     * "declared" 120, landed a hair under half, and was thrown away. Every
+     * 1080p60 download would have been. The rate asked for is known here
+     * without guessing: it comes off the master playlist with the rendition.
      */
-    if result.declared_fps > 0.0 && result.implied_fps > 0.0 {
-        let ratio = result.implied_fps / result.declared_fps;
-        if ratio < 0.5 {
-            return Err(format!(
-                "The finished file holds {:.4} fps of picture against a declared {:.4}, so most of the video is missing.",
-                result.implied_fps, result.declared_fps
-            ));
-        }
+    if too_few_frames(result.implied_fps, expected_fps) {
+        return Err(format!(
+            "The finished file holds {:.4} fps of picture against the {:.4} this rendition is, so most of the video is missing.",
+            result.implied_fps, expected_fps
+        ));
     }
 
     // A stream copy cuts on a keyframe, so a couple of seconds either way is
@@ -495,6 +532,46 @@ mod tests {
     }
 
     /// The input must be one file, not a list of them.
+    /*
+     * The rate the frame count is weighed against.
+     *
+     * Measured on a real one-minute 1080p60 clip, 2026-10-05: 3600 frames over
+     * 60.002667 s, `avg_frame_rate` 59.9973, `r_frame_rate` 120. The file was
+     * exactly right and was rejected, because the check read `r_frame_rate` -
+     * which is not the frame rate but the lowest rate that can write every
+     * timestamp exactly, and doubles the moment timestamps land on half-frame
+     * boundaries. 59.9973 against 120 is a hair under half, so the gate fired
+     * on a perfect file, and would have fired on every 1080p60 download.
+     */
+    #[test]
+    fn a_good_1080p60_minute_is_not_mistaken_for_a_gutted_file() {
+        assert!(
+            !too_few_frames(59.9973, 60.0),
+            "the rendition's own rate is what the count is weighed against"
+        );
+        assert!(
+            too_few_frames(59.9973, 120.0),
+            "this is the comparison that was wrong; it must stay wrong, not silently start passing"
+        );
+    }
+
+    #[test]
+    fn a_gappy_broadcast_still_passes() {
+        // beskok 2026-09-07, 360p30: 32728 frames over 1127.333 s of source.
+        assert!(!too_few_frames(29.03, 30.0));
+    }
+
+    #[test]
+    fn a_file_with_almost_no_picture_is_caught() {
+        assert!(too_few_frames(4.0, 60.0));
+    }
+
+    #[test]
+    fn an_unknown_rate_checks_nothing() {
+        assert!(!too_few_frames(59.99, 0.0));
+        assert!(!too_few_frames(0.0, 60.0));
+    }
+
     #[test]
     fn the_input_is_a_single_joined_stream() {
         let args = args_of(MuxMode::Copy, 0.0);
@@ -683,7 +760,7 @@ mod tests {
         assert!(load_fraction(&seen) > 0.0, "no progress was ever reported");
 
         // The check the app itself runs before calling a job done.
-        let verified = verify(&tools, &output, wanted).await.expect("verify");
+        let verified = verify(&tools, &output, wanted, 60.0).await.expect("verify");
         assert!(verified.has_video && verified.has_audio);
 
         /*

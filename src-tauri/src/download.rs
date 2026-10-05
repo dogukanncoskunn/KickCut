@@ -590,7 +590,7 @@ async fn assemble(app: &AppHandle, job: &Job, control: &Arc<Control>) -> Result<
     ticker.abort();
     result?;
 
-    mux::verify(&tools, &output, job.output_seconds).await?;
+    mux::verify(&tools, &output, job.output_seconds, job.frame_rate).await?;
 
     // The segments have served their purpose; they are typically far larger
     // than the file they produced.
@@ -857,6 +857,17 @@ pub async fn load_jobs(app: AppHandle) -> Result<(), String> {
         *jobs = restored;
     }
     emit_queue(&app);
+    /*
+     * Anything that was still waiting its turn starts now.
+     *
+     * Without this the queue came back and then sat there: a job left in
+     * Queued - which is every job behind the one that was running - had
+     * nothing to start it again, and its card offers "pause", not "resume", so
+     * there was no way out of it from the screen either. Harmless with one
+     * download at a time, and immediately visible once a selection of four
+     * goes in at once and the app is closed before they finish.
+     */
+    pump(&app);
     Ok(())
 }
 
