@@ -5,7 +5,8 @@ import { bytes } from "../lib/format";
 import { useMotion } from "../lib/Motion";
 import { AutoResumeControl } from "../lib/AutoResume";
 import { SpeedControl } from "../lib/SpeedControl";
-import { Badge, Button, Card, Note, ProgressBar, Spinner, Toggle } from "../lib/ui";
+import { useUpdater } from "../lib/Updater";
+import { Badge, Button, Card, Icon, Note, ProgressBar, Spinner, Toggle } from "../lib/ui";
 
 /*
  * Settings as a row of cards rather than a column of sections.
@@ -20,12 +21,18 @@ import { Badge, Button, Card, Note, ProgressBar, Spinner, Toggle } from "../lib/
  * grid fit as many as would go stranded the fourth card alone on a second row,
  * which is the one arrangement of four things that reads as a mistake. Four
  * across or two by two are both square; three and a spare is not.
+ *
+ * Updating is not a fifth card for the same reason: five on that grid strands
+ * one. It is also not the same kind of thing - the four are preferences you
+ * set and leave, this is an action you take - so it gets a strip of its own
+ * across the foot, which reads as deliberate rather than as a leftover.
  */
 export function Settings() {
   const t = useT();
   const { motion, setMotion } = useMotion();
 
   return (
+    <div className="flex flex-col gap-5">
     <div className="grid items-stretch gap-5 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
       <SettingCard title={t("ffmpeg.title")} hint={t("ffmpeg.hint")}>
         <FfmpegSetting />
@@ -48,6 +55,85 @@ export function Settings() {
         </div>
       </SettingCard>
     </div>
+
+    <UpdateSetting />
+    </div>
+  );
+}
+
+/*
+ * The whole point of this strip: nobody should have to go back to a release
+ * page. The app knows what it is running and what is published, so the only
+ * honest thing to put here is both of those and one button.
+ */
+function UpdateSetting() {
+  const t = useT();
+  const { stage, version, check, install } = useUpdater();
+
+  const status =
+    stage.kind === "checking"
+      ? t("update.checking")
+      : stage.kind === "current"
+        ? t("update.current")
+        : stage.kind === "available"
+          ? t("update.available", { version: stage.update.version })
+          : stage.kind === "installing"
+            ? t("update.installing")
+            : stage.kind === "restarting"
+              ? t("update.restarting")
+              : stage.kind === "failed"
+                ? stage.message
+                : "";
+
+  const busy = stage.kind === "checking" || stage.kind === "installing" || stage.kind === "restarting";
+
+  return (
+    <Card className="flex flex-col gap-3 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Icon name="download" className="size-4 shrink-0 text-muted" />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-body font-medium text-body">
+              {t("settings.update")}
+              {version ? <span className="ml-2 font-mono text-small text-muted">{version}</span> : null}
+            </span>
+            <span
+              className={
+                "truncate text-small " +
+                (stage.kind === "failed"
+                  ? "text-rose-text"
+                  : stage.kind === "available"
+                    ? "text-kick-text"
+                    : "text-muted")
+              }
+            >
+              {status || t("settings.update.hint")}
+            </span>
+          </div>
+        </div>
+
+        {stage.kind === "available" ? (
+          <Button kind="primary" icon="download" onClick={install}>
+            {t("update.install")}
+          </Button>
+        ) : (
+          <Button kind="quiet" icon="refresh" disabled={busy} onClick={check}>
+            {t("update.check")}
+          </Button>
+        )}
+      </div>
+
+      {stage.kind === "installing" ? (
+        <div className="flex flex-col gap-1.5">
+          <ProgressBar value={stage.total > 0 ? stage.received / stage.total : null} />
+          {stage.total > 0 ? (
+            <span className="font-mono text-small text-muted">
+              {bytes(stage.received)} / {bytes(stage.total)}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
