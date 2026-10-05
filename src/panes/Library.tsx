@@ -68,6 +68,23 @@ export function Library() {
       current.includes(uuid) ? current.filter((x) => x !== uuid) : [...current, uuid],
     );
 
+  /*
+   * Escape gets out of choosing, the way it gets out of everything else.
+   *
+   * The only way back used to be unticking every card one at a time, which
+   * for a change of mind over nine broadcasts is nine clicks to undo one.
+   * Bound on the window rather than on the grid because the pointer is
+   * usually nowhere near a card by the time someone wants out.
+   */
+  useEffect(() => {
+    if (!choosing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPicked([]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [choosing]);
+
   function takePicked() {
     if (!results) return;
     // Queue order follows the list on screen rather than the order they were
