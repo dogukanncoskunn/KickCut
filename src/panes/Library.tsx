@@ -6,7 +6,18 @@ import { channelVods, resolveVod } from "../lib/kickApi";
 import { cleanError } from "../lib/errors";
 import { compactCount, shortDate, timecode } from "../lib/format";
 import { useSelection } from "../lib/Selection";
-import { Badge, Button, Card, Columns, EmptyState, Icon, Input, Note, Skeleton } from "../lib/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Columns,
+  EmptyState,
+  Icon,
+  Input,
+  Note,
+  Skeleton,
+} from "../lib/ui";
 import type { IconName } from "../lib/ui";
 
 /*
@@ -29,7 +40,7 @@ const REFRESH_MS = 60_000;
 export function Library() {
   const t = useT();
   const { locale } = useLocale();
-  const { vod: selected, select } = useSelection();
+  const { vods: committed, select, selectMany } = useSelection();
 
   const [channel, setChannel] = useState("");
   const [link, setLink] = useState("");
@@ -40,6 +51,32 @@ export function Library() {
   // question. A pasted link has nothing to re-ask, so it clears this.
   const [watching, setWatching] = useState<string | null>(null);
 
+  /*
+   * What has been ticked but not yet handed over.
+   *
+   * It lives here rather than in the selection context, because arriving in
+   * that context is what moves the app to the download screen. Writing each
+   * tick straight through would change tab on the first one and make picking
+   * four broadcasts impossible. Nothing leaves this list until the user says
+   * so, and then all of it leaves together.
+   */
+  const [picked, setPicked] = useState<string[]>([]);
+  const choosing = picked.length > 0;
+
+  const toggle = (uuid: string) =>
+    setPicked((current) =>
+      current.includes(uuid) ? current.filter((x) => x !== uuid) : [...current, uuid],
+    );
+
+  function takePicked() {
+    if (!results) return;
+    // Queue order follows the list on screen rather than the order they were
+    // ticked: newest first is how they were read, so it is how they should run.
+    const chosen = results.vods.filter((v) => picked.includes(v.uuid));
+    if (chosen.length > 0) selectMany(chosen);
+    setPicked([]);
+  }
+
   async function listChannel(e: FormEvent) {
     e.preventDefault();
     if (!channel.trim() || busy) return;
@@ -49,6 +86,7 @@ export function Library() {
       const vods = await channelVods(channel);
       setResults({ channel: vods[0]?.channel || channel.trim(), vods });
       setWatching(channel.trim());
+      setPicked([]);
     } catch (err) {
       setError(cleanError(err));
       setResults(null);
@@ -106,6 +144,7 @@ export function Library() {
       const one = await resolveVod(link);
       setResults({ channel: one.channel, vods: [one] });
       setWatching(null);
+      setPicked([]);
       select(one);
     } catch (err) {
       setError(cleanError(err));
@@ -175,6 +214,7 @@ export function Library() {
         <div className="flex flex-col gap-3">
           <p className="text-small text-muted">
             {t("library.results", { count: results.vods.length, channel: results.channel })}
+            {results.vods.length > 1 ? ` · ${t("library.pick.hint")}` : ""}
           </p>
           <Columns>
             {results.vods.map((v) => (
@@ -182,82 +222,149 @@ export function Library() {
                 key={v.uuid}
                 vod={v}
                 locale={locale}
-                active={selected?.uuid === v.uuid}
+                active={committed.some((c) => c.uuid === v.uuid)}
+                choosing={choosing}
+                checked={picked.includes(v.uuid)}
+                onToggle={() => toggle(v.uuid)}
                 onSelect={() => select(v)}
                 selectLabel={t("library.select")}
                 selectedLabel={t("library.selected")}
+                pickLabel={t("library.pick")}
                 viewsLabel={t("library.views", { count: compactCount(v.views, locale) })}
               />
             ))}
           </Columns>
         </div>
       ) : null}
+
+      {/*
+        Only on screen once something is ticked, and stuck to the bottom of the
+        viewport so it cannot scroll away half way down a list of twenty. It is
+        the only way out of choosing, so it has to stay reachable from wherever
+        the list has been scrolled to.
+      */}
+      {choosing ? (
+        <div className="appear sticky bottom-3 z-20 mx-auto flex w-fit items-center gap-5 rounded-full border border-kick/40 bg-surface px-5 py-2 shadow-2xl shadow-black/50">
+          <span className="text-body font-medium text-body">
+            {t("library.picked", { count: picked.length })}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button kind="quiet" size="small" onClick={() => setPicked([])}>
+              {t("library.picked.clear")}
+            </Button>
+            <Button kind="primary" size="small" icon="scissors" onClick={takePicked}>
+              {t("library.picked.take")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
+/*
+ * Picking several, the way a phone's gallery does it.
+ *
+ * Ctrl-click anywhere on a card starts choosing; from then on a plain click on
+ * any card ticks or unticks it, because somebody assembling a set is not also
+ * trying to open one of them. The labelled button only exists outside that
+ * mode, for the ordinary case of wanting a single broadcast.
+ */
 function VodCard({
   vod,
   locale,
   active,
+  choosing,
+  checked,
+  onToggle,
   onSelect,
   selectLabel,
   selectedLabel,
+  pickLabel,
   viewsLabel,
 }: {
   vod: Vod;
   locale: string;
   active: boolean;
+  choosing: boolean;
+  checked: boolean;
+  onToggle: () => void;
   onSelect: () => void;
   selectLabel: string;
   selectedLabel: string;
+  pickLabel: string;
   viewsLabel: string;
 }) {
   return (
-    <Card
-      kind={active ? "primary" : "normal"}
-      className={
-        "appear flex flex-col overflow-hidden transition-colors " +
-        (active ? "border-kick/50" : "hover:border-muted/30")
-      }
+    <div
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey || choosing) onToggle();
+      }}
+      className={choosing ? "cursor-pointer select-none" : undefined}
     >
-      <div className="relative aspect-video bg-ink">
-        {vod.thumbnail ? (
-          <img
-            src={vod.thumbnail}
-            alt=""
-            loading="lazy"
-            className="size-full object-cover"
-            // A pruned VOD keeps its record but loses its thumbnail; an alt-text
-            // placeholder box looks broken, an empty frame does not.
-            onError={(e) => {
-              e.currentTarget.style.visibility = "hidden";
-            }}
-          />
-        ) : null}
-        <span className="absolute right-2 bottom-2 rounded bg-ink/85 px-1.5 py-0.5 font-mono text-mini text-body">
-          {timecode(vod.durationMs / 1000)}
-        </span>
-      </div>
+      <Card
+        kind={active || checked ? "primary" : "normal"}
+        className={
+          "appear flex flex-col overflow-hidden transition-colors " +
+          (checked
+            ? "border-kick ring-1 ring-kick/40"
+            : active
+              ? "border-kick/50"
+              : "hover:border-muted/30")
+        }
+      >
+        <div className="relative aspect-video bg-ink">
+          {vod.thumbnail ? (
+            <img
+              src={vod.thumbnail}
+              alt=""
+              loading="lazy"
+              className="size-full object-cover"
+              // A pruned VOD keeps its record but loses its thumbnail; an
+              // alt-text placeholder box looks broken, an empty frame does not.
+              onError={(e) => {
+                e.currentTarget.style.visibility = "hidden";
+              }}
+            />
+          ) : null}
+          <span className="absolute right-2 bottom-2 rounded bg-ink/85 px-1.5 py-0.5 font-mono text-mini text-body">
+            {timecode(vod.durationMs / 1000)}
+          </span>
+          {choosing ? (
+            <span className="absolute top-2 left-2 rounded bg-ink/85 p-1">
+              <Checkbox checked={checked} onChange={onToggle} label={pickLabel} />
+            </span>
+          ) : null}
+        </div>
 
-      <div className="flex flex-1 flex-col gap-2.5 p-3.5">
-        <h3 className="line-clamp-2 text-body font-medium text-body" title={vod.title}>
-          {vod.title}
-        </h3>
-        <div className="flex items-center gap-2 font-mono text-mini text-muted">
-          <Icon name="clock" className="size-3.5" />
-          <span>{shortDate(vod.startedAt, locale)}</span>
-          <span aria-hidden="true">·</span>
-          <span>{viewsLabel}</span>
+        <div className="flex flex-1 flex-col gap-2.5 p-3.5">
+          <h3 className="line-clamp-2 text-body font-medium text-body" title={vod.title}>
+            {vod.title}
+          </h3>
+          <div className="flex items-center gap-2 font-mono text-mini text-muted">
+            <Icon name="clock" className="size-3.5" />
+            <span>{shortDate(vod.startedAt, locale)}</span>
+            <span aria-hidden="true">·</span>
+            <span>{viewsLabel}</span>
+          </div>
+          <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+            {active ? <Badge kind="ok">{selectedLabel}</Badge> : <span />}
+            {choosing ? (
+              <span className="h-7" />
+            ) : (
+              <Button
+                kind={active ? "quiet" : "primary"}
+                size="small"
+                icon="scissors"
+                onClick={onSelect}
+              >
+                {selectLabel}
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-          {active ? <Badge kind="ok">{selectedLabel}</Badge> : <span />}
-          <Button kind={active ? "quiet" : "primary"} size="small" icon="scissors" onClick={onSelect}>
-            {selectLabel}
-          </Button>
-        </div>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 

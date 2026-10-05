@@ -1,190 +1,112 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useLocale, useT } from "../i18n";
 import { api } from "../lib/api";
-import type { MuxMode, PlaylistSummary, RangePlan, Rendition } from "../lib/api";
+import type { NewJob, Vod } from "../lib/api";
 import { cleanError } from "../lib/errors";
-import { bytes, parseKickDate, shortDate, timecode } from "../lib/format";
-import { useFfmpeg } from "../lib/Ffmpeg";
+import { shortDate, timecode } from "../lib/format";
 import { useSelection } from "../lib/Selection";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Field,
-  Input,
-  Note,
-  Section,
-  Dropdown,
-  Skeleton,
-  Spinner,
-  Toggle,
-} from "../lib/ui";
+import { Button, Card, EmptyState, Icon, Note, Section } from "../lib/ui";
 import { useConfirmedCancel, useQueue } from "../lib/Queue";
 import { SpeedControl } from "../lib/SpeedControl";
 import { isActive, JobCard } from "./JobCard";
-import { RangePicker } from "./RangePicker";
-import type { Range } from "./RangePicker";
+import { VodSetup } from "./VodSetup";
 
 /*
  * The output folder is remembered per machine. Someone downloading VODs is
  * almost always putting them in the same place, and re-picking it every time
- * is the kind of small friction that makes a tool annoying to live with.
+ * is the kind of small friction that makes a tool annoying to live with. It is
+ * also the one setting every selected broadcast shares, which is why it lives
+ * up here rather than inside each panel.
  */
 const FOLDER_KEY = "kickcut.outputDir";
 
+/*
+ * The download screen: a rail of the broadcasts picked in Library, and the
+ * settings of whichever one is being looked at.
+ *
+ * Nothing here is applied to all of them. Choosing several is only a way of
+ * carrying them over in one go - quality, range, file name and mux mode are
+ * each broadcast's own decision, made in its own panel. The screen's job is to
+ * hold the panels, keep their state alive while the user moves between them,
+ * and do the queuing.
+ */
 export function Setup() {
   const t = useT();
   const { locale } = useLocale();
-  const { vod } = useSelection();
+  const { vods, active, focus, remove } = useSelection();
 
-  const [renditions, setRenditions] = useState<Rendition[] | null>(null);
-  const [qualityName, setQualityName] = useState("");
-  const [summary, setSummary] = useState<PlaylistSummary | null>(null);
-  const [range, setRange] = useState<Range | null>(null);
-  const [plan, setPlan] = useState<RangePlan | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [outputDir, setOutputDir] = useState(() => localStorage.getItem(FOLDER_KEY) ?? "");
-  const [fileName, setFileName] = useState("");
-  const [muxMode, setMuxMode] = useState<MuxMode>("copy");
-  const [queued, setQueued] = useState(false);
-  const ffmpeg = useFfmpeg();
-
-  const masterUrl = vod?.masterUrl ?? null;
-  const quality = useMemo(
-    () => renditions?.find((r) => r.name === qualityName) ?? null,
-    [renditions, qualityName],
-  );
-
-  /* Qualities, once per broadcast. */
-  useEffect(() => {
-    if (!masterUrl) {
-      setRenditions(null);
-      return;
-    }
-    // A late answer for a broadcast the user has already moved away from must
-    // not overwrite the current one.
-    let live = true;
-    setRenditions(null);
-    setSummary(null);
-    setRange(null);
-    setPlan(null);
-    setError(null);
-    api
-      .renditions(masterUrl)
-      .then((list) => {
-        if (!live) return;
-        setRenditions(list);
-        setQualityName(list[0]?.name ?? "");
-      })
-      .catch((err) => live && setError(cleanError(err)));
-    return () => {
-      live = false;
-    };
-  }, [masterUrl]);
-
-  /* The playlist behind the chosen quality: real duration and break marks. */
-  const playlistUrl = quality?.playlistUrl ?? null;
-  useEffect(() => {
-    if (!playlistUrl) return;
-    let live = true;
-    api
-      .playlistSummary(playlistUrl)
-      .then((s) => {
-        if (!live) return;
-        setSummary(s);
-        /*
-         * Only when there is nothing to keep.
-         *
-         * Every rendition of a broadcast is the same recording at a different
-         * bitrate, so the timeline a user has already picked out is still
-         * exactly as valid after switching quality. Resetting it - which is
-         * what this used to do, along with blanking the summary and making the
-         * picker vanish and reappear - threw away a range someone may have
-         * spent a minute getting right, for no reason at all.
-         */
-        setRange((current) => current ?? { start: 0, end: s.totalSeconds });
-      })
-      .catch((err) => live && setError(cleanError(err)));
-    return () => {
-      live = false;
-    };
-  }, [playlistUrl]);
+  const [drafts, setDrafts] = useState<Record<string, NewJob | null>>({});
+  const [queued, setQueued] = useState<Record<string, boolean>>({});
+  const [notice, setNotice] = useState<{ kind: "error" | "warn"; text: string } | null>(null);
 
   /*
-   * The plan is recomputed in Rust so the segment arithmetic has exactly one
-   * implementation. Dragging a handle fires continuously, so it is debounced -
-   * what the user watches while dragging is the clip length, which is local.
+   * Every panel is built as soon as its broadcast is selected, and the ones
+   * not being looked at are hidden rather than unmounted.
+   *
+   * Building them lazily was the first attempt and it was wrong: a panel that
+   * has never been opened has no quality, no range and no plan, so "queue all"
+   * could only ever queue the broadcasts you had happened to click on - which
+   * is exactly the work selecting several was meant to save. Each one costs
+   * two small requests to stream.kick.com, and Rust caches the playlists, so
+   * the price of resolving them up front is a few text files.
    */
-  const planTimer = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (!playlistUrl || !range || !quality) return;
-    window.clearTimeout(planTimer.current);
-    planTimer.current = window.setTimeout(() => {
-      api
-        .planRange(playlistUrl, range.start, range.end, quality.bandwidth)
-        .then(setPlan)
-        .catch((err) => setError(cleanError(err)));
-    }, 220);
-    return () => window.clearTimeout(planTimer.current);
-  }, [playlistUrl, range, quality]);
 
+  // Whatever leaves the selection takes its draft and its mark with it.
+  const picked = vods.map((v) => v.uuid).join();
   useEffect(() => {
-    if (plan) setMuxMode(plan.crossesDiscontinuity ? "reencode" : "copy");
-  }, [plan?.crossesDiscontinuity]);
+    const live = new Set(picked ? picked.split(",") : []);
+    const prune = <T,>(m: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(Object.entries(m).filter(([id]) => live.has(id)));
+    setDrafts(prune);
+    setQueued(prune);
+  }, [picked]);
 
-  /*
-   * A default name that is useful in a folder full of these: who streamed it
-   * and when. The stream title is not used - they are long, emoji-heavy and
-   * often identical from day to day, which is the opposite of what a file name
-   * is for. The user can still type whatever they like.
-   */
-  useEffect(() => {
-    if (!vod) return;
-    const day = parseKickDate(vod.startedAt);
-    const stamp = day ? day.toISOString().slice(0, 10) : "";
-    setFileName([vod.channel, stamp].filter(Boolean).join(" "));
-    setQueued(false);
-  }, [vod]);
+  // Stable, so a panel reporting an unchanged draft cannot loop this screen.
+  const onDraft = useCallback((uuid: string, job: NewJob | null) => {
+    setDrafts((current) => (current[uuid] === job ? current : { ...current, [uuid]: job }));
+  }, []);
 
   async function chooseFolder() {
-    const picked = await open({ directory: true, multiple: false, defaultPath: outputDir || undefined });
+    const picked = await open({
+      directory: true,
+      multiple: false,
+      defaultPath: outputDir || undefined,
+    });
     if (typeof picked === "string") {
       localStorage.setItem(FOLDER_KEY, picked);
       setOutputDir(picked);
     }
   }
 
-  async function addToQueue() {
-    if (!vod || !plan || !quality) return;
+  /*
+   * One broadcast and all of them go through here, so the two can never queue
+   * a job differently. They are sent in rail order, which is the order they
+   * were listed in, and Rust runs them one after another.
+   */
+  async function addToQueue(ids: string[]) {
+    const ready = ids.filter((id) => drafts[id]);
+    const skipped = ids.length - ready.length;
     try {
-      await api.enqueueJob({
-        title: vod.title,
-        channel: vod.channel,
-        quality: quality.name,
-        playlistUrl: quality.playlistUrl,
-        startIndex: plan.startIndex,
-        endIndex: plan.endIndex,
-        trimOffset: plan.trimOffset,
-        outputSeconds: plan.outputSeconds,
-        crossesDiscontinuity: plan.crossesDiscontinuity,
-        outputDir,
-        fileName,
-        muxMode,
-        frameRate: quality.frameRate,
+      for (const id of ready) await api.enqueueJob(drafts[id]!);
+      setQueued((current) => {
+        const next = { ...current };
+        for (const id of ready) next[id] = true;
+        return next;
       });
-      setQueued(true);
-      setError(null);
+      setNotice(
+        skipped > 0 ? { kind: "warn", text: t("setup.queueAll.skipped", { count: skipped }) } : null,
+      );
     } catch (err) {
-      setError(cleanError(err));
+      setNotice({ kind: "error", text: cleanError(err) });
     }
   }
 
   // No broadcast picked yet still leaves the downloads box on screen: it is
   // part of this tab, not part of the form, and a running job has to stay
   // reachable whether or not the next one has been set up.
-  if (!vod) {
+  if (vods.length === 0) {
     return (
       <div className="flex flex-col gap-4">
         <EmptyState icon="scissors">{t("empty.setup")}</EmptyState>
@@ -194,259 +116,156 @@ export function Setup() {
     );
   }
 
-  const whole = summary !== null && range !== null && range.start === 0 && range.end === summary.totalSeconds;
+  /*
+   * Handed down to the panels rather than placed here, because the alignment
+   * that puts each panel's save block level with the last box opposite only
+   * holds when both ends sit in the same two-column grid. Only the panel on
+   * show renders them, so there is one queue box however many are set up.
+   */
+  const screenBoxes = (
+    <>
+      <RunningDownloads />
+      <SpeedLimitBox />
+    </>
+  );
+
+  const panels = vods.map((v) => (
+    <div key={v.uuid} style={v.uuid === active?.uuid ? undefined : { display: "none" }}>
+      <VodSetup
+        vod={v}
+        visible={v.uuid === active?.uuid}
+        outputDir={outputDir}
+        onChooseFolder={() => void chooseFolder()}
+        onDraft={onDraft}
+        queued={queued[v.uuid] === true}
+        onEnqueue={() => void addToQueue([v.uuid])}
+        screenBoxes={screenBoxes}
+      />
+    </div>
+  ));
+
+  const readyCount = vods.filter((v) => drafts[v.uuid]).length;
 
   return (
     <div className="flex flex-col gap-4">
-      {/*
-        The broadcast is context, not a decision, so it gets one slim strip
-        rather than a section of its own - the height it used to take was height
-        the choices below had to scroll for.
-      */}
-      <Card className="flex items-center gap-4 p-3">
-        {vod.thumbnail ? (
-          <img src={vod.thumbnail} alt="" className="h-14 w-24 shrink-0 rounded object-cover" />
-        ) : null}
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 className="truncate text-mid font-semibold text-body" title={vod.title}>
-            {vod.title}
-          </h3>
-          <p className="truncate font-mono text-small text-muted">
-            {vod.channel} · {shortDate(vod.startedAt, locale)} · {t("setup.length")}{" "}
-            {timecode((summary?.totalSeconds ?? vod.durationMs / 1000) || 0)}
-          </p>
+      {notice ? <Note kind={notice.kind}>{notice.text}</Note> : null}
+
+      {vods.length > 1 ? (
+        <div className="grid items-start gap-4 xl:grid-cols-[13rem_minmax(0,1fr)]">
+          <Rail
+            vods={vods}
+            activeId={active?.uuid ?? null}
+            locale={locale}
+            state={(uuid) => (queued[uuid] ? "queued" : drafts[uuid] ? "ready" : "waiting")}
+            onFocus={focus}
+            onRemove={remove}
+          />
+          <div className="min-w-0">{panels}</div>
         </div>
-      </Card>
+      ) : (
+        panels
+      )}
 
-      {error ? <Note kind="error">{error}</Note> : null}
+      {vods.length > 1 ? (
+        <Card className="flex flex-wrap items-center justify-between gap-4 p-3">
+          <span className="text-small text-muted">
+            {t("setup.queueAll.hint", { ready: readyCount, total: vods.length })}
+          </span>
+          <Button
+            kind="primary"
+            size="large"
+            icon="download"
+            disabled={readyCount === 0}
+            onClick={() => void addToQueue(vods.map((v) => v.uuid))}
+          >
+            {t("setup.queueAll", { count: readyCount })}
+          </Button>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
 
-      {/*
-        Two columns instead of one long stack.
+/*
+ * The broadcasts carried over from Library, and which one is being set up.
+ *
+ * Deliberately terse: a date, a length and a mark. The title is the one thing
+ * left out, because Kick stream titles are long and often identical from day
+ * to day - in a narrow column they would wrap to three lines each and still
+ * not tell the two apart. The date does.
+ */
+function Rail({
+  vods,
+  activeId,
+  locale,
+  state,
+  onFocus,
+  onRemove,
+}: {
+  vods: Vod[];
+  activeId: string | null;
+  locale: string;
+  state: (uuid: string) => "queued" | "ready" | "waiting";
+  onFocus: (uuid: string) => void;
+  onRemove: (uuid: string) => void;
+}) {
+  const t = useT();
+  return (
+    <Section title={t("setup.rail", { count: vods.length })}>
+      <Card className="flex flex-col gap-1 p-2">
+        {vods.map((v) => {
+          const on = v.uuid === activeId;
+          const mark = state(v.uuid);
+          return (
+            <div
+              key={v.uuid}
+              className={
+                "group flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors " +
+                (on ? "bg-raised" : "hover:bg-raised/60")
+              }
+            >
+              <button
+                type="button"
+                onClick={() => onFocus(v.uuid)}
+                className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left"
+              >
+                <span
+                  className={
+                    "truncate text-small " + (on ? "font-medium text-body" : "text-muted")
+                  }
+                >
+                  {shortDate(v.startedAt, locale)}
+                </span>
+                <span className="font-mono text-mini text-muted/80">
+                  {timecode(v.durationMs / 1000)}
+                </span>
+              </button>
 
-        Everything here used to be full width and stacked, so a screen with room
-        to spare on both sides still needed scrolling to reach the download
-        button. The timeline is the one control that genuinely wants width, so
-        it keeps the wide column; the choices that are just a list of options
-        read perfectly well in a narrow one beside it.
-      */}
-      {/*
-        The columns stretch to the taller of the two. They used to be top
-        aligned, which meant the right one was only as tall as its own content
-        and the save block at its foot had no free space to be pushed into - so
-        the rail stopped short and the button sat opposite the middle of the
-        left column instead of level with the box that ends it.
-      */}
-      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(22rem,1fr)]">
-        <div className="flex min-w-0 flex-col gap-4">
-      <Section title={t("setup.quality")}>
-        {!renditions && !error ? (
-          <Card className="flex items-center gap-3 p-4">
-            <Spinner className="size-4 text-muted" />
-            <span className="text-small text-muted">{t("setup.quality.loading")}</span>
-          </Card>
-        ) : null}
-        {renditions ? (
-          <Card className="p-4">
-            <Field label={t("setup.quality")}>
-              <Dropdown
-                value={qualityName}
-                onChange={setQualityName}
-                className="w-full"
-                ariaLabel={t("setup.quality")}
-                options={renditions.map((r, i) => ({
-                  value: r.name,
-                  label:
-                    t("setup.quality.option", {
-                      name: r.name,
-                      bitrate: (r.bandwidth / 1e6).toFixed(1),
-                    }) +
-                    /*
-                      Kick publishes no separate source rendition, so the top
-                      rung is always the best available. It is only called the
-                      source when its encoding shows it was passed through
-                      rather than transcoded; otherwise it is just the highest.
-                    */
-                    (i === 0 ? ` (${t(r.isSource ? "quality.source" : "quality.highest")})` : ""),
-                }))}
-              />
-            </Field>
-          </Card>
-        ) : null}
-      </Section>
-
-      {renditions ? (
-        <Section
-          title={t("setup.range")}
-          action={
-            summary && range ? (
-              <label className="flex items-center gap-2.5 text-small text-muted">
-                {t("setup.range.whole")}
-                <Toggle
-                  checked={whole}
-                  label={t("setup.range.whole")}
-                  onChange={(on) =>
-                    on
-                      ? setRange({ start: 0, end: summary.totalSeconds })
-                      : // Narrowing from the whole broadcast needs somewhere to
-                        // start; the middle half is a neutral first guess.
-                        setRange({
-                          start: summary.totalSeconds * 0.25,
-                          end: summary.totalSeconds * 0.75,
-                        })
+              {mark === "queued" ? (
+                <Icon name="check" className="size-3.5 shrink-0 text-kick-text" />
+              ) : (
+                <span
+                  title={t(`setup.rail.${mark}`)}
+                  className={
+                    "size-1.5 shrink-0 rounded-full " + (mark === "ready" ? "bg-kick" : "bg-muted/50")
                   }
                 />
-              </label>
-            ) : undefined
-          }
-        >
-          {!summary ? (
-            <Card className="flex flex-col gap-3 p-4">
-              <Skeleton className="h-2 w-full" />
-              <Skeleton className="h-9 w-36" />
-            </Card>
-          ) : (
-            <Card className="flex flex-col gap-4 p-4">
-              {range ? (
-                <RangePicker
-                  total={summary.totalSeconds}
-                  discontinuities={summary.discontinuitySeconds}
-                  value={range}
-                  onChange={setRange}
-                />
-              ) : null}
-              {!summary.complete ? <Note kind="warn">{t("setup.warn.incomplete")}</Note> : null}
-            </Card>
-          )}
-        </Section>
-      ) : null}
+              )}
 
-      <RunningDownloads />
-      <SpeedLimitBox />
-        </div>
-
-        {/* What the choices on the left add up to, and the button that acts. */}
-        <div className="flex min-w-0 flex-col gap-4">
-          {plan ? (
-            <Section title={t("setup.plan")}>
-              <div className="flex flex-col gap-3">
-                <Card className="flex flex-wrap items-end gap-x-8 gap-y-4 p-4">
-                  <Figure label={t("setup.plan.output")} value={timecode(plan.outputSeconds)} />
-                  <Figure label={t("setup.plan.size")} value={bytes(plan.estimatedBytes)} />
-                  <Figure
-                    label={t("setup.plan.segments", { count: plan.segmentCount })}
-                    value={`${plan.startIndex}–${plan.endIndex}`}
-                    quiet
-                  />
-                </Card>
-                {plan.downloadSeconds - plan.outputSeconds > 1 ? (
-                  <p className="text-small text-muted">
-                    {t("setup.plan.trim", {
-                      extra: timecode(plan.downloadSeconds - plan.outputSeconds),
-                    })}
-                  </p>
-                ) : null}
-                {plan.crossesDiscontinuity ? (
-                  <Note kind="warn">{t("setup.warn.discontinuity")}</Note>
-                ) : null}
-              </div>
-            </Section>
-          ) : null}
-
-          {plan ? (
-            <Section title={t("setup.mux")}>
-              {/* Stacked, not side by side: the column is narrow, and these are
-                  two paragraphs to read rather than two things to compare. */}
-              <div className="flex flex-col gap-3">
-                {(["copy", "reencode"] as const).map((mode) => (
-                  <ModeCard
-                    key={mode}
-                    active={muxMode === mode}
-                    suggested={plan.crossesDiscontinuity === (mode === "reencode")}
-                    title={t(`setup.mux.${mode}`)}
-                    hint={t(`setup.mux.${mode}.hint`)}
-                    suggestedLabel={t("setup.mux.suggested")}
-                    onPick={() => setMuxMode(mode)}
-                  />
-                ))}
-              </div>
-            </Section>
-          ) : null}
-
-          {/*
-            The save block is anchored to the foot of the rail.
-
-            The left column is the taller of the two - it carries the range, the
-            queue and the speed cap - so this one used to stop short and leave
-            the button floating in the middle of an empty half-column while the
-            left side ran on past it. Pushing this block down puts the action on
-            the same baseline as the last box opposite, and the slack collects
-            in one deliberate gap instead of a ragged edge.
-          */}
-          {plan ? (
-            <Section title={t("setup.output")} className="mt-auto">
-              <div className="flex flex-col gap-3">
-                <Card className="flex flex-col gap-3 p-4">
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-small font-medium text-muted">
-                      {t("setup.output.folder")}
-                    </span>
-                    <div className="flex gap-2">
-                      <Input
-                        value={outputDir}
-                        readOnly
-                        placeholder="…"
-                        className="min-w-0 flex-1 font-mono text-small"
-                        title={outputDir}
-                      />
-                      <Button icon="folder" onClick={() => void chooseFolder()}>
-                        {t("setup.output.choose")}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="file-name" className="text-small font-medium text-muted">
-                      {t("setup.output.name")}
-                    </label>
-                    <Input
-                      id="file-name"
-                      value={fileName}
-                      onChange={(e) => setFileName(e.target.value)}
-                      spellCheck={false}
-                    />
-                  </div>
-                </Card>
-
-                {/*
-                  ffmpeg has to exist before a job is queued, not after it
-                  finishes. Downloading for an hour and only then discovering
-                  there is nothing to mux with is the one failure this app must
-                  never produce.
-                */}
-                {!ffmpeg.ready && ffmpeg.status ? (
-                  <Note kind="warn">{t("ffmpeg.blocked")}</Note>
-                ) : null}
-
-                <div className="flex items-center gap-3">
-                  <Button
-                    kind="primary"
-                    size="large"
-                    icon="download"
-                    disabled={!outputDir || !fileName.trim() || !ffmpeg.ready}
-                    onClick={() => void addToQueue()}
-                    className="flex-1"
-                  >
-                    {t("setup.start")}
-                  </Button>
-                </div>
-                {queued ? (
-                  <span className="appear text-body text-kick-text">{t("setup.queued")}</span>
-                ) : null}
-              </div>
-            </Section>
-          ) : null}
-        </div>
-      </div>
-    </div>
+              <button
+                type="button"
+                onClick={() => onRemove(v.uuid)}
+                title={t("setup.rail.remove")}
+                aria-label={t("setup.rail.remove")}
+                className="grid size-5 shrink-0 place-items-center rounded text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-text focus-visible:opacity-100"
+              >
+                <Icon name="close" className="size-3" />
+              </button>
+            </div>
+          );
+        })}
+      </Card>
+    </Section>
   );
 }
 
@@ -510,68 +329,5 @@ function SpeedLimitBox() {
         <SpeedControl />
       </Card>
     </Section>
-  );
-}
-
-function Figure({ label, value, quiet }: { label: string; value: string; quiet?: boolean }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-small font-medium text-muted">{label}</span>
-      <span className={"font-mono " + (quiet ? "text-mid text-muted" : "text-title text-body")}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/*
- * A choice between two real costs - time against exactness - so both are
- * stated rather than hidden behind a label. The suggestion follows the plan:
- * a range that spans a break in the broadcast is the case where a stream copy
- * is most likely to disappoint.
- */
-function ModeCard({
-  active,
-  suggested,
-  title,
-  hint,
-  suggestedLabel,
-  onPick,
-}: {
-  active: boolean;
-  suggested: boolean;
-  title: string;
-  hint: string;
-  suggestedLabel: string;
-  onPick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      aria-pressed={active}
-      className={
-        "flex h-full flex-col gap-2 rounded-lg border p-4 text-left transition-colors " +
-        (active
-          ? "border-kick/60 bg-raised/70"
-          : "border-line bg-surface/60 hover:border-muted/30")
-      }
-    >
-      <span className="flex items-center gap-2">
-        <span
-          className={
-            "size-3.5 shrink-0 rounded-full border-2 " +
-            (active ? "border-kick bg-kick" : "border-muted")
-          }
-        />
-        <span className="text-body font-medium text-body">{title}</span>
-      </span>
-      <span className="text-small text-muted">{hint}</span>
-      {suggested ? (
-        <span className="mt-auto pt-1">
-          <Badge kind="ok">{suggestedLabel}</Badge>
-        </span>
-      ) : null}
-    </button>
   );
 }

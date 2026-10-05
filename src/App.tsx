@@ -45,13 +45,16 @@ const TABS: { id: TabId; icon: IconName; label: MessageKey; title: MessageKey; w
 export function App() {
   const t = useT();
   const [tab, setTab] = useState<TabId>("library");
-  const { vod } = useSelection();
+  const { vods } = useSelection();
 
-  // Choosing a broadcast is the start of setting up a download, so it moves
-  // there rather than leaving the user to notice a tab has become useful.
+  // Committing to a broadcast is the start of setting up a download, so it
+  // moves there rather than leaving the user to notice a tab has become
+  // useful. Keyed on the uuids rather than the array, which is a fresh object
+  // on every render and would fire this on each one.
+  const picked = vods.map((v) => v.uuid).join();
   useEffect(() => {
-    if (vod) setTab("download");
-  }, [vod]);
+    if (picked) setTab("download");
+  }, [picked]);
 
   return (
     <div className="flex h-full flex-col bg-ink">

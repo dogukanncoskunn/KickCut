@@ -36,6 +36,7 @@ const ICONS = {
   scissors:
     "M4 3l8 8.4M12 3 4 11.4M3.6 12.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8M12.4 12.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8",
   chevron: "M6 3.5 10.5 8 6 12.5",
+  detach: "M9.5 2.5h4v4M13.5 2.5 8 8M11 9v3.6a.9.9 0 0 1-.9.9H3.4a.9.9 0 0 1-.9-.9V5.9a.9.9 0 0 1 .9-.9H7",
   trash: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2a.9.9 0 0 0 .9.8h4a.9.9 0 0 0 .9-.8l.6-8.2M6.8 7v4M9.2 7v4",
   sun: "M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6M8 1.6v1.4M8 13v1.4M14.4 8H13M3 8H1.6M12.5 3.5l-1 1M4.5 11.5l-1 1M12.5 12.5l-1-1M4.5 4.5l-1-1",
   moon: "M13 9.4A5.4 5.4 0 0 1 6.6 3a5.6 5.6 0 1 0 6.4 6.4",
@@ -355,6 +356,40 @@ export function Toggle({
           (checked ? "left-4.5 bg-kick" : "left-0.5 bg-muted")
         }
       />
+    </button>
+  );
+}
+
+/*
+ * A tick box, for picking several things out of a list.
+ *
+ * Square rather than a switch, and deliberately not the same control as
+ * `Toggle`: a switch turns a setting on, a box marks one row among many, and
+ * giving both the same shape would make a list of fifteen rows read as a list
+ * of fifteen settings.
+ */
+export function Checkbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={
+        "grid size-4.5 shrink-0 place-items-center rounded border transition-colors " +
+        (checked ? "border-kick bg-kick text-onkick" : "border-muted/60 bg-ink hover:border-muted")
+      }
+    >
+      {checked ? <Icon name="check" className="size-3" /> : null}
     </button>
   );
 }
